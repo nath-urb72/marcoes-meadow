@@ -5,15 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Python-Based Garden Simulator</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/lucide@latest"></script>
+<script>tailwind.config = { theme: { extend: { colors: { emerald: { 50: "#fbf3dc", 100: "#f4e8c8", 200: "#e6d6a8", 300: "#cfd98a", 400: "#9fd45a", 500: "#79c63e", 600: "#5aa832", 700: "#3f7f26", 800: "#2f5a1c", 900: "#24421a", 950: "#142510" } } } } };</script>
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
+<script src="pixel-art.js"></script>
 <script src="script.js" defer></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=Press+Start+2P&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 body {
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  background-color: #1e261c;
+  font-family: 'Pixelify Sans', ui-monospace, sans-serif;
+  background-color: #2a1a0f;
   color: #f3f4f6;
 }
 
@@ -30,26 +31,27 @@ body {
 .tv-row { transition: opacity .2s, box-shadow .2s, background-color .2s; }
 .tv-row.unvisited { opacity: .25; }
 .tv-row.unvisited .tv-num { visibility: hidden; }
-.tv-row.current { box-shadow: 0 0 0 2px #fcd34d; background-color: #3b4a2a; }
+.tv-row.current { box-shadow: 0 0 0 2px #fcd34d; background-color: #6b4a22; }
 .tv-row.linked { box-shadow: 0 0 0 2px #38bdf8; opacity: 1; }
 </style>
+<link rel="stylesheet" href="pixel-theme.css">
 </head>
 <body class="min-h-screen p-4 flex flex-col justify-between overflow-x-hidden">
 
   <!-- Boot screen: shown while Python loads and the topics run by themselves. -->
-  <div id="boot-overlay" class="fixed inset-0 z-40 flex items-center justify-center bg-[#1e261c]/90 backdrop-blur-sm p-4">
+  <div id="boot-overlay" class="fixed inset-0 z-40 flex items-center justify-center bg-[#2a1a0f]/90 backdrop-blur-sm p-4">
     <div class="glass-panel rounded-2xl p-8 max-w-md w-full text-center">
-      <div id="boot-spinner" class="mx-auto mb-4 h-10 w-10 rounded-full border-4 border-emerald-900 border-t-emerald-400 animate-spin"></div>
+      <div id="boot-spinner" class="mx-auto mb-4 h-16 w-16"></div>
       <h2 id="boot-title" class="text-lg font-bold text-emerald-100 mb-2">Preparing the garden...</h2>
       <p id="boot-status" class="text-sm text-emerald-300">Loading the game code...</p>
       <div id="boot-actions" class="hidden mt-5 flex gap-3 justify-center">
         <button onclick="autoStartGame()" class="px-4 py-2 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white">Try again</button>
-        <button onclick="dismissBootOverlay()" class="px-4 py-2 rounded-xl text-sm font-bold bg-[#2a3825] hover:bg-[#34462e] border border-emerald-700 text-emerald-200">Open the code editor</button>
+        <button onclick="dismissBootOverlay()" class="px-4 py-2 rounded-xl text-sm font-bold bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 text-emerald-200">Open the code editor</button>
       </div>
     </div>
   </div>
 
-  <header class="w-full max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-2 border-b border-[#43533c]/40">
+  <header class="w-full max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-2 border-b border-[#7a5530]/40">
     <div>
       <div class="flex items-center gap-2">
         <h1 class="text-2xl font-extrabold tracking-tight text-emerald-100">Python-Based Garden Simulator</h1>
@@ -65,25 +67,27 @@ body {
       <div class="glass-panel px-4 py-2 rounded-xl flex flex-col items-end min-w-[120px]">
         <span class="text-[10px] text-emerald-400 uppercase tracking-widest font-bold">STAMINA</span>
         <span class="text-sm font-extrabold text-emerald-300" id="stamina-text">100 / 100</span>
-        <div class="w-full bg-[#1b2219] h-1.5 rounded-full overflow-hidden mt-1">
+        <div class="w-full bg-[#1f130a] h-1.5 rounded-full overflow-hidden mt-1">
           <div id="stamina-bar" class="bg-gradient-to-r from-lime-500 to-emerald-400 h-full rounded-full" style="width: 100%"></div>
         </div>
       </div>
       <button onclick="useTonic()" title="Use a Stamina Tonic" class="glass-panel px-4 py-2 rounded-xl text-xs font-bold text-emerald-200 hover:text-white flex items-center gap-2">
-        <span>🧪</span> Tonic ×<span id="tonic-count">0</span>
+        <span data-px="tonic" data-s="16" class="inline-flex"></span> Tonic ×<span id="tonic-count">0</span>
       </button>
       <button onclick="endDay()" class="glass-panel px-4 py-2 rounded-xl text-xs font-bold text-amber-300 hover:text-amber-100 flex items-center gap-2">
-        <i data-lucide="moon" class="w-4 h-4"></i> End Day
+        <span data-px="moon" data-s="16" class="inline-flex shrink-0"></span> End Day
       </button>
     </div>
   </header>
+
+  <div id="fx-chips" class="hidden w-full max-w-7xl mx-auto flex flex-wrap items-center gap-2 mb-3"></div>
 
   <main class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-4 flex-grow">
 
     <!-- LEFT: RESOURCES -->
     <section id="resources-section" class="lg:col-span-3 glass-panel rounded-2xl p-4">
-      <h2 class="text-base font-bold text-emerald-200 border-b border-[#43533c]/30 pb-2 mb-4 flex items-center gap-2">
-        <i data-lucide="database" class="w-4 h-4 text-emerald-400"></i> Resource Storage
+      <h2 class="text-base font-bold text-emerald-200 border-b border-[#7a5530]/30 pb-2 mb-4 flex items-center gap-2">
+        <span data-px="barrel" data-s="16" class="inline-flex shrink-0"></span> Resource Storage
       </h2>
       <div class="space-y-4">
         <div>
@@ -91,7 +95,7 @@ body {
             <span class="flex items-center gap-1.5 text-blue-300">Water Reserves</span>
             <span id="water-text">0 / 200 L</span>
           </div>
-          <div class="w-full bg-[#1b2219] h-2.5 rounded-full overflow-hidden">
+          <div class="w-full bg-[#1f130a] h-2.5 rounded-full overflow-hidden">
             <div id="water-bar" class="bg-gradient-to-r from-blue-500 to-cyan-400 h-full rounded-full" style="width: 0%"></div>
           </div>
         </div>
@@ -106,8 +110,8 @@ body {
 
     <!-- CENTER -->
     <section class="lg:col-span-6 flex flex-col gap-4">
-      <div class="flex flex-wrap max-w-full bg-[#192218] p-1.5 rounded-xl border border-emerald-800/40 w-fit">
-        <button onclick="switchTab('game')" id="tab-game" class="px-4 py-1.5 rounded-lg text-xs font-bold bg-[#283623] text-emerald-100">Interactive Sanctuary</button>
+      <div class="flex flex-wrap max-w-full bg-[#24160c] p-1.5 rounded-xl border border-emerald-800/40 w-fit">
+        <button onclick="switchTab('game')" id="tab-game" class="px-4 py-1.5 rounded-lg text-xs font-bold bg-[#6b4423] text-emerald-100">Interactive Sanctuary</button>
         <button onclick="switchTab('code')" id="tab-code" class="px-4 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100">Student Code Editor</button>
         <button onclick="switchTab('book')" id="tab-book" class="px-4 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100">Plant Book</button>
         <button onclick="switchTab('inventory')" id="tab-inventory" class="px-4 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100">Inventory</button>
@@ -116,43 +120,89 @@ body {
       </div>
 
       <div id="view-game" class="glass-panel rounded-2xl p-6 min-h-[380px]">
-        <div class="flex items-center justify-between mb-3">
+        <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
           <div>
             <h2 class="text-lg font-bold text-white">Sanctuary Garden Grid</h2>
             <p class="text-xs text-emerald-300">Pick a tool, then click a tile.</p>
           </div>
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-emerald-300">Seed Bag:</span>
-            <select id="crop-selector" class="bg-[#1b2219] border border-emerald-700 text-emerald-100 text-sm rounded-xl px-3 py-2"></select>
+          <div class="flex items-start gap-2 min-w-0">
+            <span class="text-xs text-emerald-300 pt-2">Seed Bag:</span>
+            <div id="seed-tray" class="flex flex-wrap justify-end gap-1.5 max-w-[19rem] max-h-[7.5rem] overflow-y-auto"></div>
+            <select id="crop-selector" class="hidden"></select>
           </div>
         </div>
-        <div id="tool-selector" class="flex bg-[#192218] p-1.5 rounded-xl border border-emerald-800/40 w-fit mb-4">
-          <button onclick="selectTool('plant')" id="tool-plant" data-tool="plant" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#283623] text-emerald-100">🌱 Plant</button>
-          <button onclick="selectTool('water')" id="tool-water" data-tool="water" class="px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100">💧 Water</button>
-          <button onclick="selectTool('harvest')" id="tool-harvest" data-tool="harvest" class="px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100">🧺 Harvest</button>
-          <button onclick="selectTool('shovel')" id="tool-shovel" data-tool="shovel" class="px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100">⛏️ Shovel</button>
+        <div id="tool-selector" class="flex bg-[#24160c] p-1.5 rounded-xl border border-emerald-800/40 w-fit mb-4">
+          <button onclick="selectTool('plant')" id="tool-plant" data-tool="plant" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#6b4423] text-emerald-100"><span data-px="sprout" data-s="16" class="inline-flex"></span> Plant</button>
+          <button onclick="selectTool('water')" id="tool-water" data-tool="water" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100"><span data-px="drop" data-s="16" class="inline-flex"></span> Water</button>
+          <button onclick="selectTool('harvest')" id="tool-harvest" data-tool="harvest" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100"><span data-px="basket" data-s="16" class="inline-flex"></span> Harvest</button>
+          <button onclick="selectTool('shovel')" id="tool-shovel" data-tool="shovel" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100"><span data-px="shovel" data-s="16" class="inline-flex"></span> Shovel</button>
+          <button onclick="selectTool('ward')" id="tool-ward" data-tool="ward" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100"><span data-px="ward" data-s="16" class="inline-flex"></span> Ward ×<span id="ward-count">0</span></button>
+          <button onclick="selectTool('spray')" id="tool-spray" data-tool="spray" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100"><span data-px="spray" data-s="16" class="inline-flex"></span> Spray ×<span id="spray-count">0</span></button>
+          <button onclick="selectTool('radar')" id="tool-radar" data-tool="radar" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100"><span data-px="radar" data-s="16" class="inline-flex"></span> Radar</button>
+          <button onclick="quickDefend()" id="quick-defend" title="Spends up to 3 of your Wards on the Shadow Hound's route" class="inline-flex items-center gap-1.5 px-3 py-1.5 ml-2 rounded-lg text-xs font-bold bg-[#4a2a6a] hover:bg-[#5d3585] text-purple-100 border border-purple-400/40"><span data-px="shield" data-s="16" class="inline-flex"></span> Quick-Defend</button>
+          <button onclick="rescueTriage()" id="rescue-btn" title="Spends up to 3 Cleansing Sprays on the most valuable infected plants" class="inline-flex items-center gap-1.5 px-3 py-1.5 ml-1 rounded-lg text-xs font-bold bg-[#4a2a6a] hover:bg-[#5d3585] text-purple-100 border border-purple-400/40"><span data-px="spray" data-s="16" class="inline-flex"></span> Rescue</button>
         </div>
+        <p id="predator-status" class="hidden text-xs font-bold text-purple-300 mb-2"></p>
         <div id="garden-grid" class="grid grid-cols-10 gap-1"></div>
+        <div id="radar-panel" class="hidden mt-4 triage-board">
+          <h3 class="font-bold text-emerald-200 mb-1">Blight Radar</h3>
+          <p id="radar-where" class="text-xs text-emerald-300/80 mb-1"></p>
+          <p id="radar-summary" class="text-sm text-white mb-2"></p>
+          <div id="radar-bars" class="space-y-1 mb-2"></div>
+          <p id="radar-search" class="text-xs text-emerald-300/80"></p>
+          <p id="radar-note" class="text-xs text-emerald-300/70 mt-1"></p>
+        </div>
+        <div id="raid-panel" class="hidden mt-4 triage-board">
+          <div class="flex items-center gap-2 mb-1"><span id="raid-icon"></span><h3 class="font-bold text-purple-200">Magpie raid tonight</h3></div>
+          <p id="raid-summary" class="text-sm text-white mb-2"></p>
+          <div id="raid-list" class="space-y-1 mb-2"></div>
+          <p id="raid-dp" class="text-xs text-emerald-300/80"></p>
+          <p id="raid-lock" class="text-xs text-yellow-300 mt-1"></p>
+        </div>
+        <div id="registry-panel" class="hidden mt-4 triage-board">
+          <h3 class="font-bold text-emerald-200 mb-1">Ward Registry</h3>
+          <p class="text-xs text-emerald-300/80 mb-2">A hash table: each Ward's tile number is hashed to pick one of the buckets below.</p>
+          <div id="registry-list" class="space-y-1 mb-2"></div>
+          <p id="registry-stats" class="text-xs text-emerald-300/80"></p>
+          <div id="registry-buckets" class="flex flex-wrap gap-1 mt-1"></div>
+        </div>
+        <div id="triage-board" class="hidden mt-4 triage-board">
+          <h3 class="font-bold text-purple-200 mb-1">Rescue Triage</h3>
+          <p class="text-xs text-emerald-300/80 mb-2">Infected plants, most valuable first. Rescue cures the top 3 (as many Sprays as you have).</p>
+          <div id="triage-list" class="space-y-1 mb-3"></div>
+          <table id="triage-table" class="w-full text-xs"></table>
+        </div>
       </div>
 
       <div id="view-book" class="glass-panel rounded-2xl p-6 min-h-[380px] hidden">
         <div class="flex items-center justify-between mb-4">
           <div>
             <h2 class="text-lg font-bold text-white flex items-center gap-2">
-              <i data-lucide="book-open" class="w-5 h-5 text-emerald-400"></i> Plant Book
+              <span data-px="book" data-s="24" class="inline-flex shrink-0"></span> Plant Book
             </h2>
             <p class="text-xs text-emerald-300">Every plant family, and which plants you have unlocked.</p>
           </div>
           <span id="plant-book-count" class="text-xs font-bold text-emerald-300 bg-emerald-950/50 border border-emerald-800/60 px-3 py-1 rounded-full">0 / 0 unlocked</span>
         </div>
-        <div id="plant-book-mode" class="flex bg-[#192218] p-1 rounded-xl border border-emerald-800/40 w-fit mb-4">
-          <button onclick="setPlantBookMode('book')" id="pbmode-book" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#283623] text-emerald-100">📖 Book</button>
-          <button onclick="setPlantBookMode('compare')" id="pbmode-compare" class="px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100">🌳 Traversal Compare</button>
+        <div id="plant-book-mode" class="flex bg-[#24160c] p-1 rounded-xl border border-emerald-800/40 w-fit mb-4">
+          <button onclick="setPlantBookMode('book')" id="pbmode-book" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#6b4423] text-emerald-100"><span data-px="book" data-s="16" class="inline-flex"></span> Book</button>
+          <button onclick="setPlantBookMode('compare')" id="pbmode-compare" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100"><span data-px="tree" data-s="16" class="inline-flex"></span> Traversal Compare</button>
         </div>
 
         <div id="plant-book-standard">
           <p id="plant-book-empty" class="text-sm text-emerald-300/80">Run Topic 4 in the Student Code Editor to fill the Plant Book.</p>
-          <div id="plant-book-list" class="space-y-2"></div>
+          <div class="flex flex-wrap items-center gap-2 mb-2">
+            <input id="plant-tree-search" type="search" placeholder="Find a plant or tier" autocomplete="off" onkeydown="if (event.key === 'Enter') plantTreeSearch()" class="flex-1 min-w-[160px] bg-[#1f130a] border border-emerald-700 p-2 text-sm text-white">
+            <select id="plant-tree-mode" title="How the tree is walked to find it" class="bg-[#1f130a] border border-emerald-700 p-2 text-sm text-white">
+              <option value="dfs">Depth-first</option>
+              <option value="bfs">Breadth-first</option>
+            </select>
+            <button onclick="plantTreeSearch()" class="px-3 py-2 text-xs font-bold bg-emerald-700 hover:bg-emerald-600 text-white">Find</button>
+            <button onclick="clearPlantTreeSearch()" class="px-3 py-2 text-xs font-bold bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 text-emerald-200">Clear</button>
+          </div>
+          <p id="plant-tree-status" class="text-xs text-emerald-300/90 mb-2 min-h-[1rem]"></p>
+          <div id="plant-tree-wrap" class="plant-tree-wrap"><div id="plant-tree" class="plant-tree"></div></div>
+          <div id="plant-tree-detail" class="inv-detail mt-3"></div>
         </div>
 
         <div id="plant-book-compare" class="hidden">
@@ -161,9 +211,9 @@ body {
             <p class="text-xs text-emerald-300/90 mb-3">The same Plant Book tree, visited four ways. Press Play to watch all four walk it together, or hover any node to see where it lands in each order. <span class="text-emerald-400/70">(Demo only. Nothing here affects the game.)</span></p>
             <div class="flex flex-wrap items-center gap-2 mb-2">
               <button id="traversal-play" onclick="toggleTraversalPlay()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white">▶ Play</button>
-              <button onclick="stepTraversal()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#2a3825] hover:bg-[#34462e] border border-emerald-700 text-emerald-200">Step ⏭</button>
-              <button onclick="resetTraversal()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#2a3825] hover:bg-[#34462e] border border-emerald-700 text-emerald-200">↺ Reset</button>
-              <select id="traversal-speed" onchange="changeTraversalSpeed()" class="bg-[#1b2219] border border-emerald-700 text-emerald-100 text-xs rounded-lg px-2 py-1.5">
+              <button onclick="stepTraversal()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 text-emerald-200">Step ⏭</button>
+              <button onclick="resetTraversal()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 text-emerald-200">↺ Reset</button>
+              <select id="traversal-speed" onchange="changeTraversalSpeed()" class="bg-[#1f130a] border border-emerald-700 text-emerald-100 text-xs rounded-lg px-2 py-1.5">
                 <option value="800">Slow</option>
                 <option value="450" selected>Normal</option>
                 <option value="180">Fast</option>
@@ -182,23 +232,30 @@ body {
       </div>
 
   <div id="view-inventory" class="glass-panel rounded-2xl p-6 min-h-[380px] hidden">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-lg font-bold text-white flex items-center gap-2">
-              <i data-lucide="package" class="w-5 h-5 text-emerald-400"></i> Inventory
-            </h2>
-            <p class="text-xs text-emerald-300">Plants you own, fresh from the harvest. Sell All moves them to the Market.</p>
-          </div>
+        <div class="mb-4">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <span data-px="box" data-s="24" class="inline-flex shrink-0"></span> Inventory
+          </h2>
+          <p class="text-xs text-emerald-300">Plants you own, fresh from the harvest. Pick a slot to sell or remove it.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <input id="inventory-search" type="search" placeholder="Search" autocomplete="off" oninput="inventoryViewChanged()" class="flex-1 min-w-[160px] bg-[#1f130a] border border-emerald-700 p-2 text-sm text-white">
+          <select id="inventory-sort" onchange="inventoryViewChanged()" class="bg-[#1f130a] border border-emerald-700 p-2 text-sm text-white">
+            <option value="recent">Recently harvested</option>
+            <option value="low">Lowest value</option>
+            <option value="high">Highest value</option>
+          </select>
         </div>
         <p id="inventory-empty" class="text-sm text-emerald-300/80 mb-3">Nothing harvested yet.</p>
-        <div id="inventory-list" class="space-y-2"></div>
+        <div id="inventory-grid" class="inv-grid"></div>
+        <div id="inventory-detail" class="inv-detail"></div>
       </div>
 
-      <div id="view-market" class="glass-panel rounded-2xl p-6 min-h-[380px] hidden">
+  <div id="view-market" class="glass-panel rounded-2xl p-6 min-h-[380px] hidden">
         <div class="flex items-center justify-between mb-4">
           <div>
             <h2 class="text-lg font-bold text-white flex items-center gap-2">
-              <i data-lucide="store" class="w-5 h-5 text-emerald-400"></i> Market
+              <span data-px="store" data-s="24" class="inline-flex shrink-0"></span> Market
             </h2>
             <p class="text-xs text-emerald-300">Everything staged here sells automatically when the day ends.</p>
           </div>
@@ -211,38 +268,93 @@ body {
       <div id="view-marco" class="glass-panel rounded-2xl p-6 min-h-[380px] hidden">
         <div class="mb-4">
           <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <i data-lucide="shopping-bag" class="w-5 h-5 text-emerald-400"></i> Merchant Marco
+            <span data-px="bag" data-s="24" class="inline-flex shrink-0"></span> Merchant Marco
           </h2>
-          <p class="text-xs text-emerald-300">Seeds, water and tonics for the working gardener. Coins only!</p>
+          <p class="text-xs text-emerald-300">Seeds, water, tonics and night supplies for the working gardener. Coins only!</p>
         </div>
 
         <h3 class="text-sm font-bold text-emerald-200 mb-1">Water</h3>
         <p id="marco-water-info" class="text-xs text-emerald-300/80 mb-2">Water: 0 / 200 L</p>
         <div class="flex flex-wrap items-center gap-2 mb-5">
-          <button onclick="marcoBuyWater(10)" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#2a3825] hover:bg-[#34462e] border border-emerald-700 text-emerald-200">+10</button>
-          <button onclick="marcoBuyWater(25)" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#2a3825] hover:bg-[#34462e] border border-emerald-700 text-emerald-200">+25</button>
-          <button onclick="marcoBuyWater(50)" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#2a3825] hover:bg-[#34462e] border border-emerald-700 text-emerald-200">+50</button>
-          <input id="marco-water-amount" type="number" min="1" max="200" placeholder="Amount" class="w-24 bg-[#1b2219] border border-emerald-700 rounded-lg px-2 py-1.5 text-sm text-emerald-100">
+          <button onclick="marcoBuyWater(10)" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 text-emerald-200">+10</button>
+          <button onclick="marcoBuyWater(25)" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 text-emerald-200">+25</button>
+          <button onclick="marcoBuyWater(50)" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 text-emerald-200">+50</button>
+          <input id="marco-water-amount" type="number" min="1" max="200" placeholder="Amount" class="w-24 bg-[#1f130a] border border-emerald-700 rounded-lg px-2 py-1.5 text-sm text-emerald-100">
           <button onclick="marcoBuyWater()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white">Buy</button>
           <button id="marco-water-full" onclick="marcoBuyWaterFull()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white">Refill to Full</button>
         </div>
 
         <h3 class="text-sm font-bold text-emerald-200 mb-2">Stamina Tonic</h3>
-        <div class="flex items-center gap-3 rounded-xl border border-emerald-900 bg-[#1b2219] px-3 py-2 mb-5">
-          <span class="text-2xl">🧪</span>
+        <div class="flex items-center gap-3 rounded-xl border border-emerald-900 bg-[#1f130a] px-3 py-2 mb-5">
+          <span data-px="tonic" data-s="32" class="shrink-0"></span>
           <div class="flex-1">
             <div class="text-sm font-bold text-white">Stamina Tonic</div>
             <div id="marco-tonic-info" class="text-xs text-emerald-300/80">+30 stamina</div>
             <div id="marco-tonic-owned" class="text-xs text-emerald-300/80">You have 0</div>
           </div>
           <button onclick="marcoBuyTonic()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white">Buy</button>
-          <button onclick="useTonic()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#2a3825] hover:bg-[#34462e] border border-emerald-700 text-emerald-200">Use</button>
+          <button onclick="useTonic()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 text-emerald-200">Use</button>
+        </div>
+
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-bold text-emerald-200">Night Supplies</h3>
+          <label class="text-xs text-emerald-300 flex items-center gap-2">Buy quantity
+            <input id="marco-night-qty" type="number" min="1" max="999" value="1" class="w-16 bg-[#1f130a] border border-emerald-700 rounded-lg px-2 py-1 text-sm text-emerald-100">
+          </label>
+        </div>
+        <div class="space-y-2 mb-5">
+          <div class="flex items-center gap-3 rounded-xl border border-emerald-900 bg-[#1f130a] px-3 py-2">
+            <span data-px="ward" data-s="32" class="shrink-0"></span>
+            <div class="flex-1">
+              <div class="text-sm font-bold text-white">Ward</div>
+              <div id="marco-ward-info" class="text-xs text-emerald-300/80">Stops the blight when 3 or more are linked</div>
+              <div id="marco-ward-owned" class="text-xs text-emerald-300/80">You have 0</div>
+            </div>
+            <button onclick="marcoBuyWard()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white">Buy</button>
+          </div>
+          <div class="flex items-center gap-3 rounded-xl border border-emerald-900 bg-[#1f130a] px-3 py-2">
+            <span data-px="spray" data-s="32" class="shrink-0"></span>
+            <div class="flex-1">
+              <div class="text-sm font-bold text-white">Cleansing Spray</div>
+              <div id="marco-spray-info" class="text-xs text-emerald-300/80">Cleanses one blighted tile</div>
+              <div id="marco-spray-owned" class="text-xs text-emerald-300/80">You have 0</div>
+            </div>
+            <button onclick="marcoBuySpray()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white">Buy</button>
+          </div>
+          <div class="flex items-center gap-3 rounded-xl border border-emerald-900 bg-[#1f130a] px-3 py-2">
+            <span data-px="lock" data-s="32" class="shrink-0"></span>
+            <div class="flex-1">
+              <div class="text-sm font-bold text-white">Lockbox</div>
+              <div id="marco-lockbox-info" class="text-xs text-emerald-300/80">One-time unlock: the Magpie can never take your most valuable stack</div>
+              <div id="marco-lockbox-owned" class="text-xs text-emerald-300/80">Not unlocked</div>
+            </div>
+            <button id="marco-lockbox-btn" onclick="marcoBuyLockbox()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white">Unlock</button>
+          </div>
+          <div class="flex items-center gap-3 rounded-xl border border-emerald-900 bg-[#1f130a] px-3 py-2">
+            <span data-px="radar" data-s="32" class="shrink-0"></span>
+            <div class="flex-1">
+              <div class="text-sm font-bold text-white">Blight Radar</div>
+              <div id="marco-radar-info" class="text-xs text-emerald-300/80">One-time unlock: scan any tile for 5 stamina to see how close the blight is</div>
+              <div id="marco-radar-owned" class="text-xs text-emerald-300/80">Not unlocked</div>
+            </div>
+            <button id="marco-radar-btn" onclick="marcoBuyRadar()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white">Unlock</button>
+          </div>
+          <div class="flex items-center gap-3 rounded-xl border border-emerald-900 bg-[#1f130a] px-3 py-2">
+            <span data-px="lens" data-s="32" class="shrink-0"></span>
+            <div class="flex-1">
+              <div class="text-sm font-bold text-white">Scout's Lens</div>
+              <div id="marco-lens-info" class="text-xs text-emerald-300/80">Shows a predator's route until the day ends</div>
+              <div id="marco-lens-owned" class="text-xs text-emerald-300/80">You have 0</div>
+            </div>
+            <button onclick="marcoBuyLens()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white">Buy</button>
+            <button onclick="useLens()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 text-emerald-200">Use</button>
+          </div>
         </div>
 
         <div class="flex items-center justify-between mb-2">
           <h3 class="text-sm font-bold text-emerald-200">Seeds</h3>
           <label class="text-xs text-emerald-300 flex items-center gap-2">Buy quantity
-            <input id="marco-seed-qty" type="number" min="1" max="999" value="1" class="w-16 bg-[#1b2219] border border-emerald-700 rounded-lg px-2 py-1 text-sm text-emerald-100">
+            <input id="marco-seed-qty" type="number" min="1" max="999" value="1" class="w-16 bg-[#1f130a] border border-emerald-700 rounded-lg px-2 py-1 text-sm text-emerald-100">
           </label>
         </div>
         <div id="marco-seeds" class="space-y-2"></div>
@@ -250,16 +362,16 @@ body {
 
           <div id="view-code" class="glass-panel rounded-2xl p-6 flex flex-col flex-grow hidden">
         <h2 class="font-bold mb-3 flex items-center gap-2">
-          <i data-lucide="code" class="w-5 h-5 text-emerald-400"></i> Student Code Editor (Lab)
+          <span data-px="code" data-s="24" class="inline-flex shrink-0"></span> Student Code Editor (Lab)
         </h2>
-        <select id="topic-selector" onchange="loadTopic()" class="w-full bg-[#1b2219] border border-emerald-700 rounded-xl p-3 mb-4 text-sm"></select>
-        <textarea id="code-editor" readonly class="flex-1 bg-[#0a0f0a] border border-emerald-800 rounded-xl p-4 code-font text-sm font-medium leading-relaxed" spellcheck="false"></textarea>
+        <select id="topic-selector" onchange="loadTopic()" class="w-full bg-[#1f130a] border border-emerald-700 rounded-xl p-3 mb-4 text-sm"></select>
+        <textarea id="code-editor" readonly class="flex-1 bg-[#150c06] border border-emerald-800 rounded-xl p-4 code-font text-sm font-medium leading-relaxed" spellcheck="false"></textarea>
         <div class="mt-4 flex gap-3">
           <button onclick="runPythonCode()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2">
-            <i data-lucide="play" class="w-4 h-4"></i> Run Python Code
+            <span data-px="play" data-s="16" class="inline-flex shrink-0"></span> Run Python Code
           </button>
-          <button onclick="runAllTopics()" class="flex-1 bg-[#2a3825] hover:bg-[#34462e] border border-emerald-700 py-3 rounded-xl font-bold text-emerald-200 flex items-center justify-center gap-2">
-            <i data-lucide="fast-forward" class="w-4 h-4"></i> Run All Topics
+          <button onclick="runAllTopics()" class="flex-1 bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 py-3 rounded-xl font-bold text-emerald-200 flex items-center justify-center gap-2">
+            <span data-px="ff" data-s="16" class="inline-flex shrink-0"></span> Run All Topics
           </button>
         </div>
         <div id="output-console" class="mt-4 bg-black/70 border border-emerald-900 rounded-xl p-4 text-xs max-h-48 overflow-auto font-mono whitespace-pre-wrap"></div>
@@ -270,14 +382,14 @@ body {
     <section class="lg:col-span-3 flex flex-col gap-4">
       <div id="climate-queue-panel" class="glass-panel rounded-2xl p-4">
         <h3 class="font-bold text-emerald-400 mb-3 flex items-center gap-2">
-          <i data-lucide="cloud-lightning" class="w-4 h-4"></i> Climate Queue (FIFO)
+          <span data-px="cloud" data-s="16" class="inline-flex shrink-0"></span> Climate Queue (FIFO)
         </h3>
         <div id="climate-queue" class="space-y-3 text-sm"></div>
       </div>
 
       <div id="stack-panel" class="glass-panel rounded-2xl p-4 flex-1 flex flex-col">
         <h3 class="font-bold text-emerald-400 mb-3 flex items-center gap-2">
-          <i data-lucide="history" class="w-4 h-4"></i> Action History (Stack)
+          <span data-px="scroll" data-s="16" class="inline-flex shrink-0"></span> Action History (Stack)
         </h3>
         <div id="action-stack" class="flex-1 space-y-2 text-sm overflow-auto"></div>
       </div>
@@ -285,5 +397,28 @@ body {
 
   </main>
 
+  <div id="confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div class="glass-panel p-6 max-w-sm w-full" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <h3 id="confirm-title" class="font-bold text-white mb-2"></h3>
+      <p id="confirm-text" class="text-sm text-emerald-100 mb-4"></p>
+      <label id="confirm-skip-row" class="hidden flex items-center gap-2 text-xs text-emerald-300 mb-4 cursor-pointer">
+        <input id="confirm-skip" type="checkbox"> Don't ask again this session
+      </label>
+      <div class="flex gap-3 justify-end">
+        <button id="confirm-cancel" type="button" class="px-4 py-2 text-xs font-bold bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 text-emerald-200">Cancel</button>
+        <button id="confirm-ok" type="button" class="px-4 py-2 text-xs font-bold bg-emerald-700 hover:bg-emerald-600 text-white">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fx-layer" aria-hidden="true"></div>
+  <div id="gameover-overlay" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
+    <div class="glass-panel p-8 max-w-md w-full text-center">
+      <div id="gameover-art" class="mb-4 flex justify-center"></div>
+      <h2 class="text-lg font-bold text-white mb-2">Game Over</h2>
+      <p id="gameover-text" class="text-sm text-emerald-100 mb-6"></p>
+      <button onclick="location.reload()" class="px-5 py-2 text-sm font-bold bg-emerald-700 hover:bg-emerald-600 text-white">Restart</button>
+    </div>
+  </div>
 </body>
-</html>
+</html>

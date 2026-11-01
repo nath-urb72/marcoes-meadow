@@ -1,0 +1,169 @@
+/* pixel-theme.css - Garden Simulator pixel style (display only; loaded after Tailwind's own styles) */
+:root { --soil: #2a1a0f; --soil-2: #3a2616; --soil-3: #5d3d20; --edge: #150c06; --cream: #f4e8c8; --leaf: #79c63e; --gold: #f4c93c; }
+html { font-size: 17px; }
+body {
+  font-family: 'Pixelify Sans', ui-monospace, sans-serif !important;
+  background-color: var(--soil) !important;
+  background-image: conic-gradient(#2f1e12 25%, transparent 0 50%, #2f1e12 0 75%, transparent 0);
+  background-size: 32px 32px;
+  color: var(--cream) !important;
+}
+h1, h2, h3 { font-family: 'Press Start 2P', ui-monospace, monospace !important; line-height: 1.6 !important; letter-spacing: 0 !important; }
+h1 { font-size: 1rem !important; }
+h2 { font-size: .78rem !important; }
+h3 { font-size: .68rem !important; }
+.code-font, #code-editor, #output-console { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+
+/* square everything: pixel art has no rounded corners */
+*, *::before, *::after { border-radius: 0 !important; }
+
+.px { image-rendering: pixelated; image-rendering: crisp-edges; }
+img.px { display: inline-block; vertical-align: middle; max-width: none; }
+
+/* panels */
+.glass-panel {
+  background: var(--soil-2) !important;
+  backdrop-filter: none !important;
+  border: 3px solid var(--edge) !important;
+  box-shadow: 4px 4px 0 var(--edge), inset 0 0 0 2px var(--soil-3) !important;
+}
+#boot-overlay { background: rgba(26, 15, 8, .92) !important; backdrop-filter: none !important; }
+
+/* buttons, inputs */
+button, select, input { font-family: inherit !important; }
+select, input { border-width: 2px !important; }
+button:not(:disabled):hover { filter: brightness(1.12); }
+button:not(:disabled):active { transform: translate(2px, 2px); }
+button:disabled { cursor: not-allowed; }
+button:not([id^="tab-"]):not([data-tool]):not([id^="pbmode-"]):not(.seed-btn) { border-width: 2px; box-shadow: 2px 2px 0 var(--edge); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+/* meters: solid, chunky fills */
+#water-bar { background: #4a9be0 !important; }
+#stamina-bar { background: var(--leaf) !important; }
+#water-bar, #stamina-bar { box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .25); }
+
+/* the garden: grass plot with tilled-soil tiles */
+#garden-grid {
+  padding: 6px;
+  background-color: #4f8a2a;
+  background-image: conic-gradient(#5a9a30 25%, transparent 0 50%, #5a9a30 0 75%, transparent 0);
+  background-size: 16px 16px;
+  border: 4px solid #4a2e17;
+  box-shadow: inset 0 0 0 2px #2f5a1c;
+}
+.tile {
+  background-color: #7a4a26;
+  background-image: conic-gradient(#6b4423 25%, transparent 0 50%, #6b4423 0 75%, transparent 0);
+  background-size: 12px 12px;
+  border: 2px solid #3a2412;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .28);
+  padding: 1px;
+}
+.tile:hover { outline: 3px solid var(--gold); outline-offset: -3px; }
+.tile img { width: 100%; height: 100%; image-rendering: pixelated; }
+
+/* seed bag tray */
+.seed-btn { position: relative; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; background: var(--soil-3); border: 2px solid var(--edge); }
+.seed-btn.selected { outline: 3px solid var(--gold); outline-offset: 1px; background: #7a5530; }
+.seed-btn .cnt { position: absolute; right: 1px; bottom: 0; font-size: .62rem; line-height: 1; padding: 1px 3px; background: var(--edge); color: var(--cream); }
+
+/* toast */
+.toast { background: var(--soil-2) !important; border: 3px solid var(--gold) !important; box-shadow: 4px 4px 0 var(--edge) !important; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* inventory: a backpack grid of square slots */
+.inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin-bottom: 12px; }
+.inv-slot { position: relative; aspect-ratio: 1; display: grid; place-items: center; padding: 0; background: var(--soil-3); border: 2px solid var(--edge); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .28); }
+.inv-slot.empty { background: #1f130a; box-shadow: none; }
+.inv-slot.selected { outline: 3px solid var(--gold); outline-offset: 1px; background: #7a5530; }
+.inv-slot .cnt { position: absolute; right: 2px; bottom: 1px; font-size: .62rem; line-height: 1; padding: 1px 3px; background: var(--edge); color: var(--cream); }
+.inv-detail { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 12px; background: #1f130a; border: 2px solid var(--edge); }
+
+/* confirmation box */
+#confirm-modal .glass-panel { border-color: var(--gold) !important; }
+
+/* Plant Book drawn as a tree: boxes for nodes, elbow lines for edges */
+.plant-tree-wrap { overflow: auto; max-height: 560px; padding: 8px; background: #1f130a; border: 2px solid var(--edge); }
+.plant-tree { position: relative; }
+.plant-tree svg { position: absolute; left: 0; top: 0; pointer-events: none; }
+.plant-tree path { fill: none; stroke: var(--soil-3); stroke-width: 3; shape-rendering: crispEdges; }
+.plant-tree path.visited { stroke: #4a9be0; }
+.plant-tree path.onpath { stroke: var(--gold); stroke-width: 4; }
+.pt-node { position: absolute; display: flex; align-items: center; gap: 6px; padding: 0 6px; overflow: hidden; white-space: nowrap; cursor: pointer; color: var(--cream); font-size: .74rem; background: var(--soil-3); border: 2px solid var(--tc, #7a5530); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .28); }
+.pt-node.pt-tier { background: #4a3019; }
+.pt-node .pt-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: flex; flex-direction: column; line-height: 1.2; }
+.pt-node .pt-sub { font-size: .62rem; color: #c9b98f; }
+.pt-node.pt-locked { opacity: .6; }
+.pt-node.pt-locked img.px { filter: grayscale(1); }
+.pt-node.visited { outline: 3px solid #4a9be0; outline-offset: -3px; }
+.pt-node.onpath { outline: 3px solid var(--gold); outline-offset: -3px; background: #7a5530; opacity: 1; }
+.pt-node.found { outline-width: 4px; animation: pt-pulse .8s steps(2) infinite; }
+.pt-node.selected { box-shadow: 0 0 0 2px var(--cream), inset 0 -3px 0 rgba(0, 0, 0, .28); }
+.pt-node:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+@keyframes pt-pulse { 50% { background: #a87a3c; } }
+
+/* climate event screen effects: tints, stepped frames and falling pixels (all pointer-transparent) */
+#fx-layer { position: fixed; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }
+.fx { position: absolute; inset: 0; transition: opacity 1.2s steps(6); }
+.fx.fading { opacity: 0; }
+.fx i { position: absolute; top: 0; left: var(--x); display: block; background: var(--c); animation: fx-fall var(--d) linear var(--delay) infinite; }
+@keyframes fx-fall { from { transform: translate(0, -8vh); } to { transform: translate(var(--sway, 0px), 108vh); } }
+@keyframes fx-rise { 0% { transform: translate(0, 108vh); opacity: 0; } 15% { opacity: 1; } 100% { transform: translate(var(--sway, 0px), -8vh); opacity: 0; } }
+
+.fx-drought { background: linear-gradient(to top, rgba(255, 140, 30, .24), rgba(214, 120, 30, .09) 60%); }
+.fx-drought::after { content: ""; position: absolute; inset: 0; background-image: conic-gradient(rgba(255, 190, 80, .07) 25%, transparent 0 50%, rgba(255, 190, 80, .07) 0 75%, transparent 0); background-size: 8px 8px; }
+.fx-frost { box-shadow: inset 0 0 0 6px rgba(190, 230, 255, .30), inset 0 0 0 14px rgba(190, 230, 255, .18), inset 0 0 0 24px rgba(190, 230, 255, .09); background: rgba(150, 200, 255, .05); }
+.fx-glut { background: rgba(60, 70, 90, .15); box-shadow: inset 0 0 0 8px rgba(20, 24, 34, .35), inset 0 0 0 18px rgba(20, 24, 34, .18); }
+.fx-snow { background: rgba(190, 215, 255, .10); }
+.fx-snow i { width: 5px; height: 5px; background: #fff; }
+.fx-rain { background: rgba(50, 90, 160, .14); }
+.fx-rain i { width: 2px; height: 14px; }
+.fx-rally { box-shadow: inset 0 0 0 4px rgba(244, 201, 60, .38), inset 0 0 0 10px rgba(244, 201, 60, .18), inset 0 0 0 18px rgba(244, 201, 60, .08); }
+.fx-rally i { top: 0; width: 6px; height: 6px; animation-name: fx-rise; box-shadow: 4px 0 0 -2px #fff6c8, -4px 0 0 -2px #fff6c8, 0 4px 0 -2px #fff6c8, 0 -4px 0 -2px #fff6c8; }
+.fx-festival i { width: 6px; height: 6px; }
+
+.fx-chip { display: inline-flex; align-items: center; padding: 3px 8px; font-size: .72rem; color: var(--cream); background: var(--soil-2); border: 2px solid var(--edge); border-left: 6px solid var(--c); box-shadow: 2px 2px 0 var(--edge); }
+.fx-chip.past { opacity: .75; }
+@media (prefers-reduced-motion: reduce) { .fx i { display: none; } }
+
+/* mutated harvests: each mutation brings its own color (--mc), tint and corner badge */
+.inv-slot.mutated { border-color: var(--mc); box-shadow: inset 0 0 0 2px var(--edge), inset 0 -3px 0 rgba(0, 0, 0, .28); }
+.mut-sprite { display: inline-flex; }
+.mut-badge { position: absolute; left: 1px; top: 1px; display: inline-flex; padding: 1px; background: var(--edge); animation: mut-blink 1.6s steps(2) infinite; }
+@keyframes mut-blink { 50% { opacity: .55; } }
+.mut-chip { display: inline-flex; align-items: center; gap: 3px; padding: 0 5px; font-size: .68rem; font-weight: 700; color: var(--cream); background: var(--edge); border: 2px solid var(--mc); }
+
+/* Night Defense (Topic 7): blighted ground, transformed plants, Wards */
+.tile.blight { background-color: #2a1840; background-image: conic-gradient(#33204f 25%, transparent 0 50%, #33204f 0 75%, transparent 0); border-color: #150a24; }
+.tile.blight:hover { outline-color: #b06af5; }
+.tile.infected img { animation: blob-bob 1.4s steps(2) infinite; }
+@keyframes blob-bob { 50% { transform: translateY(-2px); } }
+.tile.ward.barrier { box-shadow: inset 0 0 0 2px rgba(244, 201, 60, .65), inset 0 -3px 0 rgba(0, 0, 0, .28); }
+
+/* Shadow Hound (Topic 10): the route, its target, and the hound itself (only while a Scout's Lens is active) */
+.tile { position: relative; }
+.route-dot { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; display: grid; place-items: center; font-size: .7rem; font-weight: 700; color: #1a0f2e; background: #d28bff; border: 2px solid var(--edge); pointer-events: none; }
+.tile.route-target { outline: 3px dashed #d28bff; outline-offset: -3px; }
+.hound-sprite { position: absolute; inset: 0; display: grid; place-items: center; z-index: 2; pointer-events: none; background: rgba(60, 20, 100, .35); }
+
+/* Rescue Triage (Topic 8) */
+.triage-row { display: flex; align-items: center; gap: 8px; padding: 2px 6px; font-size: .8rem; background: var(--soil-2); border: 2px solid var(--edge); }
+.triage-row.next { border-color: #b06af5; }
+.triage-rank { width: 2rem; font-weight: 700; color: #d28bff; }
+#triage-table td, #triage-table th { padding: 1px 4px; }
+.triage-used td { color: var(--gold); font-weight: 700; }
+.triage-board { padding: 8px 12px; background: #1f130a; border: 2px solid var(--edge); }
+
+/* Blight Radar (Topic 9) */
+.radar-row { display: flex; align-items: center; gap: 8px; font-size: .75rem; }
+.radar-label { width: 4.5rem; color: #c9b98f; }
+.radar-track { flex: 1; height: 12px; background: var(--edge); }
+.radar-bar { display: block; height: 100%; background: #b06af5; }
+.radar-count { width: 2rem; text-align: right; font-weight: 700; }
+
+/* Ward Registry (Topic 6): one square per bucket - empty, one Ward, or a collision */
+.bucket { display: inline-block; width: 14px; height: 14px; background: var(--edge); border: 2px solid var(--soil-3); }
+.bucket.b1 { background: #b06af5; }
+.bucket.b2 { background: var(--gold); }

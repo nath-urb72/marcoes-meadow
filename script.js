@@ -6,15 +6,64 @@
 // PATCH: bug fix or small tweak with no new feature
 // Use 0.x.y while in development; move to 1.0.0 once all 11 topics are complete.
 // =====================================================================
-const APP_VERSION = "0.12.0";
+const APP_VERSION = "1.16.0";
 
 // 100000 -> "100,000": big prices stay readable.
 const fmt = (n) => Number(n).toLocaleString("en-US");
+// Python lists arrive as proxies that die when the bridge call returns. Copy to plain JS
+// before keeping them or reading them later (toJs converts nested lists too).
+const toPlain = (x) => (x && typeof x.toJs === "function") ? x.toJs() : (x || []);
 
 let pyodideInstance = null;
 let gardenPlants = {};
 // name -> emoji, filled by addPlantsToDropdown so tiles can draw each plant's own emoji.
 let plantEmoji = {};
+
+// ---- pixel art helpers (sprites and icons are drawn by pixel-art.js) ----
+const HEART_TIER = { "\u2764": "RED", "\ud83e\udde1": "ORANGE", "\ud83d\udc9b": "YELLOW", "\ud83d\udc9a": "GREEN", "\ud83d\udc9c": "VIOLET", "\ud83d\udc97": "PINK", "\ud83e\udd0e": "BROWN" };
+// Python still sends an emoji for every row; this turns it into a sprite or icon when we have one.
+function symbol(emoji, name, size) {
+  size = size || 32;
+  if (PixelArt.PLANTS[name]) return PixelArt.img(name, "mature", size);
+  const tier = HEART_TIER[[...String(emoji)][0]];
+  if (tier) return PixelArt.icon("heart", size, PixelArt.TIERS[tier]);
+  if (emoji === "\ud83d\udcd6") return PixelArt.icon("book", size);
+  return emoji;
+}
+// ---- harvest mutations: Python decides who mutates and the multiplier; this only decides the look ----
+const MUT_LOOK = {
+  Dried:   { color: "#d08a3c", icon: "sun",    filter: "sepia(.75) saturate(.85) brightness(.88)" },
+  Chilled: { color: "#7fc4ff", icon: "ice",    filter: "hue-rotate(185deg) saturate(.85) brightness(1.1)" },
+  Frosted: { color: "#dbe9ff", icon: "flake",  filter: "grayscale(.4) brightness(1.3) hue-rotate(170deg)" },
+  Bumper:  { color: "#8a94a8", icon: "basket", filter: "saturate(.8) contrast(1.1)" },
+  Dewy:    { color: "#4a9be0", icon: "drop",   filter: "saturate(1.35) brightness(1.1) drop-shadow(0 0 2px #7fd4ff)" },
+  Gilded:  { color: "#f4c93c", icon: "coin",   filter: "sepia(.55) saturate(2.2) brightness(1.15)" },
+  Festive: { color: "#ff7fae", icon: "party",  filter: "saturate(1.7) hue-rotate(-20deg)" },
+  Lucky:   { color: "#79c63e", icon: "clover", filter: "brightness(1.15) drop-shadow(0 0 2px #79c63e)" },
+};
+const mutLook = (m) => MUT_LOOK[m] || { color: "#f4c93c", icon: "coin", filter: "none" };
+// Inventory and Market rows are keyed "Tomato" or "Tomato::Dried" (a mutated stack of its own).
+function keyLabel(key) {
+  const [name, mutation] = String(key).split("::");
+  return mutation ? `${mutation} ${name}` : name;
+}
+// A plant sprite, tinted for its mutation.
+function mutSprite(emoji, plantName, mutation, size) {
+  const html = symbol(emoji, plantName, size);
+  return mutation ? `<span class="mut-sprite" style="filter:${mutLook(mutation).filter}">${html}</span>` : html;
+}
+const mutBadge = (m) => `<span class="mut-badge">${PixelArt.icon(mutLook(m).icon, 16, mutLook(m).color)}</span>`;
+function hydratePixelIcons() {
+  document.querySelectorAll("[data-px]").forEach(el => { el.innerHTML = PixelArt.icon(el.dataset.px, Number(el.dataset.s) || 16); });
+}
+// The boot screen shows a tomato growing while Python loads.
+function startBootAnimation() {
+  const el = document.getElementById("boot-spinner");
+  let stage = 0;
+  const draw = () => { if (!el.classList.contains("hidden")) el.innerHTML = PixelArt.img("Tomato", stage++ % 4, 64); };
+  draw();
+  setInterval(draw, 450);
+}
 
 // Display-only list of action labels (populated by Python via pushAction). No JS game logic.
 let displayActionHistory = [];
@@ -75,6 +124,15 @@ async function initPyodide() {
     pyodideInstance.globals.set("pushAction", pushAction);
     pyodideInstance.globals.set("updateClimateQueue", updateClimateQueue);
     pyodideInstance.globals.set("renderPlantBook", renderPlantBook);
+    pyodideInstance.globals.set("highlightPlantPath", highlightPlantPath);
+    pyodideInstance.globals.set("updateScreenEffects", updateScreenEffects);
+    pyodideInstance.globals.set("updateNightShop", updateNightShop);
+    pyodideInstance.globals.set("showGameOver", showGameOver);
+    pyodideInstance.globals.set("updatePredator", updatePredator);
+    pyodideInstance.globals.set("updateTriage", updateTriage);
+    pyodideInstance.globals.set("updateRadar", updateRadar);
+    pyodideInstance.globals.set("updateRegistry", updateRegistry);
+    pyodideInstance.globals.set("updateRaid", updateRaid);
     pyodideInstance.globals.set("renderTraversalCompare", renderTraversalCompare);
     pyodideInstance.globals.set("updateStamina", updateStamina);
     pyodideInstance.globals.set("updateDay", updateDay);
@@ -141,35 +199,72 @@ function addPlantToGrid(pos, name, stage) {
   renderGarden();
 }
 
-// Stage icons: seed, seedling and sprout look the same for every species (nothing
-// to draw yet); a mature plant shows its own emoji from plantEmoji.
-const STAGE_ICON = { seed: "🟤", seedling: "🌱", sprout: "🌿" };
+// The Shadow Hound (Topic 10). Python sends what to show; the route is a list of tiles, hound first.
+const PREDATOR_STEPS = 5;   // tiles the hound walks per night (matches Python), used to number the route
+let predatorView = { present: false, revealed: false, pos: -1, route: [] };
+function updatePredator(present, revealed, pos, route, targetName, eta) {
+  predatorView = { present, revealed, pos, route: toPlain(route) };
+  const status = document.getElementById("predator-status");
+  status.classList.toggle("hidden", !present);
+  if (present && !revealed) {
+    status.textContent = "A Shadow Hound prowls your garden. A Scout's Lens shows where it is heading.";
+  } else if (present && predatorView.route.length) {
+    status.textContent = `The Shadow Hound (row ${Math.floor(pos / 10) + 1}, column ${pos % 10 + 1}) is heading for your ${targetName}, ` +
+      `${eta} night${eta === 1 ? "" : "s"} away. The numbers show the night it passes each tile.`;
+  } else if (present) {
+    status.textContent = "The Shadow Hound can't reach any plant right now.";
+  }
+  renderGarden();
+}
 
+// Each tile draws a code-made sprite for the plant's stage (see pixel-art.js).
 function renderGarden() {
   const grid = document.getElementById("garden-grid");
   grid.innerHTML = "";
   for (let i = 0; i < 100; i++) {
     const cell = document.createElement("div");
     const entry = gardenPlants[i];
-    const mature = entry && entry.stage === "mature";
-    cell.className = "aspect-square rounded-lg flex items-center justify-center text-xl border cursor-pointer transition-colors select-none " +
-      (mature ? "bg-[#2a3825] border-emerald-600 hover:border-emerald-400" : entry ? "bg-[#232f1f] border-emerald-900 hover:border-emerald-500" : "bg-[#2a3825] border-emerald-800 hover:border-emerald-400");
-    cell.textContent = entry ? (entry.stage === "mature" ? (plantEmoji[entry.name] || "🌱") : STAGE_ICON[entry.stage] || "🌱") : "⬜";
-    if (entry) cell.title = `${entry.name} (${entry.stage})`;
+    cell.className = "tile aspect-square flex items-center justify-center cursor-pointer select-none" + (entry ? " planted" : "");
+    if (entry && (entry.stage === "ward" || entry.stage === "barrier")) {
+      // Night Defense looks (Topic 7): a Ward, or blighted ground, or a plant the blight has transformed
+      cell.className += " ward" + (entry.stage === "barrier" ? " barrier" : "");
+      cell.innerHTML = PixelArt.wardImg(entry.stage === "barrier", 64);
+      cell.title = entry.stage === "barrier" ? "Ward - part of a barrier, blight cannot cross" : "Ward - link 3 to form a barrier";
+    } else if (entry && entry.stage === "blight") {
+      cell.className += " blight";
+      cell.innerHTML = PixelArt.blightImg(4, 64);
+      cell.title = "Blight - only Cleansing Spray can clear it";
+    } else if (entry && String(entry.stage).startsWith("infected-")) {
+      cell.className += " blight infected";
+      cell.innerHTML = PixelArt.blightImg(PixelArt.blightForStage(entry.stage.slice(9)), 64);
+      cell.title = `Infected ${entry.name} - only Cleansing Spray can save it`;
+    } else if (entry) {
+      cell.innerHTML = PixelArt.PLANTS[entry.name] ? PixelArt.img(entry.name, entry.stage, 64) : (plantEmoji[entry.name] || "\ud83c\udf31");
+      cell.title = `${entry.name} (${entry.stage})`;
+    }
+    // Shadow Hound overlay (Topic 10): only drawn while a Scout's Lens is active
+    if (predatorView.revealed && predatorView.route.length) {
+      const step = predatorView.route.indexOf(i);
+      if (step > 0) cell.insertAdjacentHTML("beforeend", `<span class="route-dot">${Math.ceil(step / PREDATOR_STEPS)}</span>`);
+      if (step === predatorView.route.length - 1) cell.classList.add("route-target");
+    }
+    if (predatorView.revealed && i === predatorView.pos) {
+      cell.insertAdjacentHTML("beforeend", `<span class="hound-sprite">${PixelArt.houndImg(64)}</span>`);
+    }
     // 10 tiles per row: flat position i  <->  (row, col)
     cell.addEventListener("click", () => handleTileClick(Math.floor(i / 10), i % 10));
     grid.appendChild(cell);
   }
 }
 
-// Which tool is active: "plant" | "water" | "harvest" | "shovel"
+// Which tool is active: "plant" | "water" | "harvest" | "shovel" | "ward" | "spray"
 let selectedTool = "plant";
 
 function selectTool(tool) {
   selectedTool = tool;
-  ["plant", "water", "harvest", "shovel"].forEach(name => {
+  ["plant", "water", "harvest", "shovel", "ward", "spray", "radar"].forEach(name => {
     const button = document.getElementById("tool-" + name);
-    button.classList.toggle("bg-[#283623]", name === tool);
+    button.classList.toggle("bg-[#6b4423]", name === tool);
     button.classList.toggle("text-emerald-100", name === tool);
     button.classList.toggle("text-emerald-400/80", name !== tool);
   });
@@ -179,6 +274,25 @@ function selectTool(tool) {
 // handle_tile_click. JS stays display-only; Python owns the rules and returns
 // a message to show (or None).
 function handleTileClick(row, col) {
+  const entry = gardenPlants[row * 10 + col];
+  const blighted = entry && (entry.stage === "blight" || String(entry.stage).startsWith("infected-"));
+  if (blighted) { runTileClick(row, col); return; }      // Python explains that only Spray works here
+  if (entry && selectedTool === "shovel") {
+    confirmAction("shovel", `Remove ${entry.name}?`,
+      `The ${entry.name} at row ${row + 1}, column ${col + 1} is removed for good. Nothing is refunded.`,
+      () => runTileClick(row, col), true);
+    return;
+  }
+  if (entry && selectedTool === "harvest" && entry.stage === "mature") {
+    confirmAction("harvest", `Harvest ${entry.name}?`,
+      `It moves to your Inventory and the tile becomes empty.`,
+      () => runTileClick(row, col), true);
+    return;
+  }
+  runTileClick(row, col);
+}
+
+function runTileClick(row, col) {
   const hook = pyodideInstance ? pyodideInstance.globals.get("handle_tile_click") : null;
   if (!hook) { showToast(notReadyMessage()); return; }
   const plantName = document.getElementById("crop-selector").value;
@@ -206,13 +320,56 @@ function callPythonAction(pyFunctionName, ...args) {
   }
 }
 
+let currentDay = 1;
+
 function endDay() {
-  callPythonAction("end_day_action");
+  confirmAction("endday", `End Day ${currentDay}?`,
+    "Plants grow, climate events roll, and everything in the Market sells. Anything you haven't done today is left undone.",
+    () => callPythonAction("end_day_action"), false);
 }
 
-function sellToMarket(name) {
-  callPythonAction("sell_to_market_action", name);
+function sellToMarket(key, qty) {
+  const label = keyLabel(key);
+  confirmAction("sell", `Move ${label} to the Market?`,
+    `${qty ? "All " + fmt(qty) + " " : "All "}${label} go to the Market and sell when the day ends.`,
+    () => callPythonAction("sell_to_market_action", key), true);
 }
+
+function removeFromInventory(key, qty) {
+  const label = keyLabel(key);
+  confirmAction("remove", `Remove ${label}?`,
+    `All ${fmt(qty)} ${label} are discarded from your Inventory. Nothing is refunded.`,
+    () => callPythonAction("remove_from_inventory_action", key), false);
+}
+
+// ---- confirmation box for crucial actions (display only; Python still owns the rules) ----
+// canSkip: show the "Don't ask again this session" tick (kept off for End Day and Remove).
+const confirmSkipped = {};
+let confirmYes = null;
+function confirmAction(key, title, text, onYes, canSkip) {
+  if (confirmSkipped[key]) { onYes(); return; }
+  confirmYes = () => {
+    if (canSkip && document.getElementById("confirm-skip").checked) confirmSkipped[key] = true;
+    onYes();
+  };
+  document.getElementById("confirm-title").textContent = title;
+  document.getElementById("confirm-text").textContent = text;
+  document.getElementById("confirm-skip").checked = false;
+  document.getElementById("confirm-skip-row").classList.toggle("hidden", !canSkip);
+  document.getElementById("confirm-modal").classList.remove("hidden");
+  document.getElementById("confirm-cancel").focus();
+}
+function closeConfirm() {
+  document.getElementById("confirm-modal").classList.add("hidden");
+  confirmYes = null;
+}
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("confirm-cancel").addEventListener("click", closeConfirm);
+  document.getElementById("confirm-ok").addEventListener("click", () => { const go = confirmYes; closeConfirm(); if (go) go(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && confirmYes) closeConfirm();
+  });
+});
 
 // updateResources(water, energy, hope, coins)
 // Or pass a single object: updateResources({"water": n, "coins": n, ...})
@@ -251,6 +408,7 @@ function addPlantsToDropdown(plants) {
     empty.textContent = "No seeds - visit Marco";
     select.appendChild(empty);
     select.value = "";
+    renderSeedTray([]);
     return;
   }
   plants.forEach(([name, emoji, owned]) => {
@@ -261,47 +419,207 @@ function addPlantsToDropdown(plants) {
     select.appendChild(option);
   });
   if (previous && plants.some(([name]) => name === previous)) select.value = previous;
+  renderSeedTray(plants);
+}
+
+// The Seed Bag as a tray of sprite buttons. The hidden <select> still holds the pick, so Python-facing code is unchanged.
+function renderSeedTray(plants) {
+  const select = document.getElementById("crop-selector");
+  const tray = document.getElementById("seed-tray");
+  tray.innerHTML = "";
+  if (!plants || plants.length === 0) {
+    tray.innerHTML = '<span class="text-xs text-amber-300/90 pt-2">No seeds - visit Marco</span>';
+    return;
+  }
+  plants.forEach(([name, emoji, owned]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "seed-btn" + (select.value === name ? " selected" : "");
+    button.title = `${name} \u00d7${fmt(owned)}`;
+    button.innerHTML = symbol(emoji, name, 32) + `<span class="cnt">${fmt(owned)}</span>`;
+    button.addEventListener("click", () => { select.value = name; renderSeedTray(plants); });
+    tray.appendChild(button);
+  });
 }
 
 // renderPlantBook(rows, unlockedCount, totalCount)
 // rows: list of [depth, emoji, name, unlocked, note], already in preorder
 // (each parent comes right before its children). depth sets the indentation.
 function renderPlantBook(rows, unlockedCount, totalCount) {
-  const list = document.getElementById("plant-book-list");
-  list.innerHTML = "";
   document.getElementById("plant-book-empty").classList.add("hidden");
   document.getElementById("plant-book-count").textContent = `${unlockedCount} / ${totalCount} unlocked`;
+  drawPlantTree(toPlain(rows));
+}
+
+// =====================================================================
+// PLANT BOOK AS A TREE (display only)
+// Python sends the tree as rows in preorder: [depth, emoji, name, unlocked, note].
+// The root ("Plant Book") is implicit. This code rebuilds the parent/child links
+// from the depths, lays the tree out left to right, and draws nodes and lines.
+// Python does the searching (PlantBook.search) and calls highlightPlantPath.
+// =====================================================================
+const PT = { nodeW: 168, nodeH: 44, colW: 196, rowH: 54, pad: 8 };
+let plantTreeNodes = {};      // name -> { info, el, line }
+let plantTreeSelected = null; // name of the clicked node
+let plantTreeRun = 0;         // bumps on every search, so an old animation stops itself
+
+function drawPlantTree(rows) {
+  const box = document.getElementById("plant-tree");
+  const root = { name: "Plant Book", emoji: "\ud83d\udcd6", unlocked: true, note: "The root of the tree: every plant family grows from here.", depth: -1, tier: null, children: [] };
+  const open = [root];
   rows.forEach(([depth, emoji, name, unlocked, note]) => {
-    const row = document.createElement("div");
-    row.className = "flex items-center gap-3 rounded-xl border px-3 py-2 " +
-      (depth === 0 ? "bg-[#2a3825] border-emerald-700 mt-3 first:mt-0" : "bg-[#1b2219] border-emerald-900") +
-      (unlocked ? "" : " opacity-60");
-    row.style.marginLeft = `${depth * 2}rem`;
-
-    const icon = document.createElement("span");
-    icon.className = "text-2xl" + (unlocked ? "" : " grayscale");
-    icon.textContent = emoji;
-
-    const text = document.createElement("div");
-    text.className = "flex-1";
-    const title = document.createElement("div");
-    title.className = "text-sm font-bold " + (unlocked ? "text-white" : "text-emerald-200/70");
-    title.textContent = name;
-    const sub = document.createElement("div");
-    sub.className = "text-xs text-emerald-300/80";
-    sub.textContent = note;
-    text.appendChild(title);
-    text.appendChild(sub);
-
-    const badge = document.createElement("span");
-    badge.className = "text-[10px] font-bold uppercase tracking-widest " + (unlocked ? "text-emerald-400" : "text-amber-400/80");
-    badge.textContent = unlocked ? "✓ Unlocked" : "🔒 Locked";
-
-    row.appendChild(icon);
-    row.appendChild(text);
-    row.appendChild(badge);
-    list.appendChild(row);
+    const tier = HEART_TIER[[...String(emoji)][0]] || null;
+    while (open[open.length - 1].depth >= depth) open.pop();
+    const parent = open[open.length - 1];
+    const node = { name, emoji, unlocked, note, depth, isTier: !!tier, tier: tier || parent.tier, children: [] };
+    parent.children.push(node);
+    open.push(node);
   });
+
+  // layout: a leaf takes the next row; a parent sits halfway between its first and last child
+  let leaves = 0, deepest = 0;
+  (function place(node) {
+    node.x = PT.pad + (node.depth + 1) * PT.colW;
+    deepest = Math.max(deepest, node.depth + 1);
+    if (node.children.length === 0) { node.y = PT.pad + leaves++ * PT.rowH; return; }
+    node.children.forEach(place);
+    node.y = (node.children[0].y + node.children[node.children.length - 1].y) / 2;
+  })(root);
+  const width = PT.pad * 2 + deepest * PT.colW + PT.nodeW;
+  const height = PT.pad * 2 + Math.max(0, leaves - 1) * PT.rowH + PT.nodeH;
+
+  // lines first (behind), one elbow per child: parent's right edge -> child's left edge
+  const paths = [];
+  (function link(node) {
+    node.children.forEach(child => {
+      const px = node.x + PT.nodeW, py = node.y + PT.nodeH / 2;
+      const cx = child.x, cy = child.y + PT.nodeH / 2, mx = px + (cx - px) / 2;
+      paths.push(`<path data-name="${child.name.replace(/"/g, "&quot;")}" d="M${px} ${py}H${mx}V${cy}H${cx}"/>`);
+      link(child);
+    });
+  })(root);
+  box.style.width = width + "px";
+  box.style.height = height + "px";
+  box.innerHTML = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${paths.join("")}</svg>`;
+
+  plantTreeNodes = {};
+  const lines = {};
+  box.querySelectorAll("path").forEach(p => { lines[p.dataset.name] = p; });
+  (function draw(node) {
+    const el = document.createElement("div");
+    el.className = "pt-node" + (node.isTier ? " pt-tier" : "") + (node.unlocked ? "" : " pt-locked");
+    el.style.cssText = `left:${node.x}px;top:${node.y}px;width:${PT.nodeW}px;height:${PT.nodeH}px;--tc:${node.tier ? PixelArt.TIERS[node.tier] : "#f4e8c8"}`;
+    el.tabIndex = 0;
+    el.title = `${node.name}: ${node.note}`;
+    const sub = node.isTier ? `<span class="pt-sub">${String(node.note).split(" ")[0]}</span>` : "";
+    el.innerHTML = `<span class="shrink-0">${symbol(node.emoji, node.name, 32)}</span>` +
+      `<span class="pt-name">${node.name}${sub}</span>` +
+      (node.unlocked || node === root ? "" : `<span class="shrink-0">${PixelArt.icon("lock", 16)}</span>`);
+    el.addEventListener("click", () => selectPlantTreeNode(node.name));
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectPlantTreeNode(node.name); } });
+    box.appendChild(el);
+    plantTreeNodes[node.name] = { info: node, el, line: lines[node.name] || null };
+    node.children.forEach(draw);
+  })(root);
+
+  if (!plantTreeNodes[plantTreeSelected]) plantTreeSelected = null;
+  ++plantTreeRun;
+  document.getElementById("plant-tree-status").textContent = "";
+  renderPlantTreeDetail();
+}
+
+function selectPlantTreeNode(name) {
+  plantTreeSelected = name;
+  renderPlantTreeDetail();
+}
+
+function renderPlantTreeDetail() {
+  const detail = document.getElementById("plant-tree-detail");
+  Object.entries(plantTreeNodes).forEach(([name, n]) => n.el.classList.toggle("selected", name === plantTreeSelected));
+  const picked = plantTreeNodes[plantTreeSelected];
+  if (!picked) {
+    detail.innerHTML = '<span class="text-xs text-emerald-300/80">Click a node to see how to unlock it.</span>';
+    return;
+  }
+  const n = picked.info;
+  detail.innerHTML = `
+    <span class="shrink-0">${symbol(n.emoji, n.name, 48)}</span>
+    <div class="flex-1">
+      <div class="text-sm font-bold text-white">${n.name}</div>
+      <div class="text-xs text-emerald-300/80">${n.note}</div>
+    </div>
+    <span class="text-[10px] font-bold uppercase tracking-widest ${n.unlocked ? "text-emerald-400" : "text-amber-400/80"}">${n.unlocked ? "\u2713 Unlocked" : PixelArt.icon("lock", 16) + " Locked"}</span>
+  `;
+}
+
+function plantTreeSearch() {
+  const hook = pyodideInstance ? pyodideInstance.globals.get("plant_book_search_action") : null;
+  if (!hook) { showToast(notReadyMessage()); return; }
+  try {
+    hook(document.getElementById("plant-tree-search").value, document.getElementById("plant-tree-mode").value);
+  } catch (err) {
+    showToast("Python error: " + err.message.trim().split("\n").pop());
+  } finally {
+    hook.destroy();
+  }
+}
+
+function clearPlantTreeHighlight() {
+  Object.values(plantTreeNodes).forEach(n => {
+    n.el.classList.remove("visited", "onpath", "found");
+    if (n.line) n.line.classList.remove("visited", "onpath");
+  });
+}
+
+function clearPlantTreeSearch() {
+  ++plantTreeRun;
+  document.getElementById("plant-tree-search").value = "";
+  document.getElementById("plant-tree-status").textContent = "";
+  clearPlantTreeHighlight();
+}
+
+// highlightPlantPath(visited, path, found, message)
+// visited: names in the order the search walked them; path: root -> match (empty if none).
+// Replays the walk one node at a time, then lights the path to the match.
+function highlightPlantPath(visited, path, found, message) {
+  const run = ++plantTreeRun;
+  visited = toPlain(visited);
+  path = toPlain(path);
+  clearPlantTreeHighlight();
+  const status = document.getElementById("plant-tree-status");
+  status.textContent = message || "";
+  if (!visited.length) return;
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const mark = (name, cls) => {
+    const n = plantTreeNodes[name];
+    if (!n) return;
+    n.el.classList.add(cls);
+    if (n.line && cls !== "found") n.line.classList.add(cls);
+  };
+  const finish = () => {
+    path.forEach(name => mark(name, "onpath"));
+    if (found && path.length) {
+      const last = path[path.length - 1];
+      mark(last, "found");
+      const n = plantTreeNodes[last];
+      if (n && n.el.scrollIntoView) n.el.scrollIntoView({ block: "nearest", inline: "center", behavior: reduceMotion ? "auto" : "smooth" });
+    }
+    status.textContent = message || "";
+  };
+  if (reduceMotion) { visited.forEach(name => mark(name, "visited")); finish(); return; }
+  let i = 0;
+  const tick = () => {
+    if (run !== plantTreeRun) return;      // a newer search or Clear took over
+    if (i < visited.length) {
+      mark(visited[i], "visited");
+      status.textContent = `Walking the tree... visited ${i + 1}`;
+      i++;
+      setTimeout(tick, 70);
+    } else {
+      finish();
+    }
+  };
+  tick();
 }
 
 // =====================================================================
@@ -349,7 +667,7 @@ function buildTraversalGrid() {
     col.className = "min-w-0";
 
     const head = document.createElement("div");
-    head.className = "tv-head sticky top-0 z-10 h-11 px-2 py-1 mb-1 rounded-lg bg-[#192218] border border-emerald-800/60";
+    head.className = "tv-head sticky top-0 z-10 h-11 px-2 py-1 mb-1 rounded-lg bg-[#24160c] border border-emerald-800/60";
     const title = document.createElement("div");
     title.className = "text-[11px] font-extrabold truncate " + panel.accent;
     title.textContent = panel.title;
@@ -366,7 +684,7 @@ function buildTraversalGrid() {
       maxDepth = Math.max(maxDepth, depth);
       const row = document.createElement("div");
       row.className = "tv-row unvisited flex items-center gap-1 h-7 px-1.5 mb-1 rounded-md border text-[11px] " +
-        (isPlant ? "bg-[#1b2219] border-emerald-900 text-emerald-50" : "bg-[#2a3825] border-emerald-700 font-bold text-white");
+        (isPlant ? "bg-[#1f130a] border-emerald-900 text-emerald-50" : "bg-[#4a3019] border-emerald-700 font-bold text-white");
       row.dataset.key = name;
       row.title = `#${i + 1} ${name} (depth ${depth}${unlocked ? "" : ", locked"})`;
       row.style.borderLeftWidth = "4px";
@@ -376,8 +694,8 @@ function buildTraversalGrid() {
       num.className = "tv-num w-5 shrink-0 text-right text-[10px] font-bold tabular-nums text-amber-300";
       num.textContent = i + 1;
       const icon = document.createElement("span");
-      icon.className = "shrink-0 text-sm leading-none" + (unlocked ? "" : " grayscale");
-      icon.textContent = emoji;
+      icon.className = "shrink-0 leading-none" + (unlocked ? "" : " grayscale");
+      icon.innerHTML = symbol(emoji, name, 16);
       const label = document.createElement("span");
       label.className = "truncate min-w-0" + (unlocked ? "" : " text-emerald-200/60");
       label.textContent = name;
@@ -511,11 +829,68 @@ function setPlantBookMode(mode) {
   document.getElementById("plant-book-compare").classList.toggle("hidden", mode !== "compare");
   [["book", "pbmode-book"], ["compare", "pbmode-compare"]].forEach(([name, id]) => {
     const button = document.getElementById(id);
-    button.classList.toggle("bg-[#283623]", mode === name);
+    button.classList.toggle("bg-[#6b4423]", mode === name);
     button.classList.toggle("text-emerald-100", mode === name);
     button.classList.toggle("text-emerald-400/80", mode !== name);
   });
   if (mode !== "compare") pauseTraversal();
+}
+
+// =====================================================================
+// SCREEN EFFECTS FOR CLIMATE EVENTS (display only)
+// Python decides which events are active (GardenGame.active_effects) and calls
+// updateScreenEffects(names). Each event gets a tint/frame layer, some get falling pixels,
+// and a chip under the header says what it does.
+//   "day"   events last until the next End Day (Drought, Cold Snap, Festival Demand, Market Glut).
+//   "night" events already did their work while the day ended (Snowstorm, Drizzle, Market Rally),
+//           so their weather plays for FX_BURST_MS and fades; the chip stays for the day.
+// =====================================================================
+const FX_BURST_MS = 8000;
+const FX = {
+  "Drought":         { mode: "day",   cls: "fx-drought",  color: "#f28a1e", tip: "Watering costs double Water today." },
+  "Cold Snap":       { mode: "day",   cls: "fx-frost",    color: "#7fc4ff", tip: "Every action costs double stamina today." },
+  "Festival Demand": { mode: "day",   cls: "fx-festival", color: "#ff7fae", tip: "One color tier sells for more for a few days.", dots: 26, dotKind: "confetti" },
+  "Market Glut":     { mode: "day",   cls: "fx-glut",     color: "#8a94a8", tip: "One color tier sells for less for a few days." },
+  "Snowstorm":       { mode: "night", cls: "fx-snow",     color: "#dbe9ff", tip: "Last night: the cold halted all natural growth.", dots: 40, dotKind: "flake" },
+  "Drizzle":         { mode: "night", cls: "fx-rain",     color: "#4a9be0", tip: "Last night: rain watered a few young plants.", dots: 48, dotKind: "drop" },
+  "Market Rally":    { mode: "night", cls: "fx-rally",    color: "#f4c93c", tip: "Last night: the Market payout got a bonus.", dots: 18, dotKind: "spark" },
+};
+let fxTimers = [];
+
+function updateScreenEffects(names) {
+  const layer = document.getElementById("fx-layer");
+  const chips = document.getElementById("fx-chips");
+  fxTimers.forEach(clearTimeout);
+  fxTimers = [];
+  layer.innerHTML = "";
+  chips.innerHTML = "";
+  const active = toPlain(names).filter(name => FX[name]);
+  chips.classList.toggle("hidden", active.length === 0);
+  active.forEach(name => {
+    const fx = FX[name];
+    const chip = document.createElement("span");
+    chip.className = "fx-chip" + (fx.mode === "night" ? " past" : "");
+    chip.style.setProperty("--c", fx.color);
+    chip.textContent = name;
+    chip.title = fx.tip;
+    chips.appendChild(chip);
+
+    const el = document.createElement("div");
+    el.className = "fx " + fx.cls;
+    for (let i = 0; i < (fx.dots || 0); i++) {
+      const dot = document.createElement("i");
+      const fall = fx.dotKind === "drop" ? 0.7 + Math.random() * 0.6 : 6 + Math.random() * 6;
+      const colors = Object.values(PixelArt.TIERS);
+      dot.style.cssText = `--x:${(Math.random() * 100).toFixed(1)}%;--d:${fall.toFixed(2)}s;--delay:-${(Math.random() * fall).toFixed(2)}s;` +
+        `--sway:${Math.round((Math.random() - 0.5) * 60)}px;--c:${fx.dotKind === "confetti" ? colors[i % colors.length] : fx.color}`;
+      el.appendChild(dot);
+    }
+    layer.appendChild(el);
+    if (fx.mode === "night") {
+      fxTimers.push(setTimeout(() => el.classList.add("fading"), FX_BURST_MS));
+      fxTimers.push(setTimeout(() => el.remove(), FX_BURST_MS + 1500));
+    }
+  });
 }
 
 // updateStamina(current, max)
@@ -526,6 +901,7 @@ function updateStamina(current, max) {
 
 // updateDay(day)
 function updateDay(day) {
+  currentDay = day;
   document.getElementById("day-counter").innerText = day;
 }
 
@@ -546,18 +922,147 @@ function updateShop(seedRows, waterPrice, water, waterMax, tonicPrice, tonicRest
   (seedRows || []).forEach(([name, emoji, price, owned, unlocked]) => {
     const row = document.createElement("div");
     row.className = "flex items-center gap-3 rounded-xl border px-3 py-2 " +
-      (unlocked ? "border-emerald-900 bg-[#1b2219]" : "border-emerald-950 bg-[#161c14] opacity-50");
+      (unlocked ? "border-emerald-900 bg-[#1f130a]" : "border-emerald-950 bg-[#1a0f08] opacity-50");
     row.innerHTML = `
-      <span class="text-2xl ${unlocked ? "" : "grayscale"}">${emoji}</span>
+      <span class="shrink-0 ${unlocked ? "" : "grayscale"}">${symbol(emoji, name, 32)}</span>
       <div class="flex-1">
         <div class="text-sm font-bold text-white">${name}${unlocked ? "" : ' <span class="text-xs font-normal text-amber-400/90">locked</span>'}</div>
         <div class="text-xs text-emerald-300/80">${fmt(price)}c per seed  -  you own ${fmt(owned)}</div>
       </div>
-      <button class="text-xs font-bold px-3 py-1.5 rounded-lg ${unlocked ? "bg-emerald-700 hover:bg-emerald-600 text-white" : "bg-[#2a3825] text-emerald-400/50 cursor-not-allowed"}" ${unlocked ? "" : "disabled"}>${unlocked ? "Buy" : "Locked"}</button>
+      <button class="text-xs font-bold px-3 py-1.5 rounded-lg ${unlocked ? "bg-emerald-700 hover:bg-emerald-600 text-white" : "bg-[#4a3019] text-emerald-400/50 cursor-not-allowed"}" ${unlocked ? "" : "disabled"}>${unlocked ? "Buy" : "Locked"}</button>
     `;
     if (unlocked) row.querySelector("button").addEventListener("click", () => marcoBuySeed(name));
     list.appendChild(row);
   });
+}
+
+// updateNightShop(wardPrice, wardsOwned, sprayPrice, spraysOwned): Marco's night supplies and the tool counts
+function updateNightShop(wardPrice, wardsOwned, sprayPrice, spraysOwned, lensPrice, lensesOwned, radarPrice, radarUnlocked, lockboxPrice, lockboxUnlocked) {
+  if (lockboxPrice !== undefined) {
+    document.getElementById("marco-lockbox-info").textContent = lockboxUnlocked
+      ? "Your most valuable stack is safe from the Magpie"
+      : `${fmt(lockboxPrice)} coins, one time  -  the Magpie can never take your most valuable stack`;
+    document.getElementById("marco-lockbox-owned").textContent = lockboxUnlocked ? "Unlocked" : "Not unlocked";
+    const lockButton = document.getElementById("marco-lockbox-btn");
+    lockButton.disabled = !!lockboxUnlocked;
+    lockButton.textContent = lockboxUnlocked ? "Owned" : "Unlock";
+  }
+  if (radarPrice !== undefined) {
+    document.getElementById("marco-radar-info").textContent = radarUnlocked
+      ? "Pick the Radar tool and click any tile to scan it (5 stamina)"
+      : `${fmt(radarPrice)} coins, one time  -  scan any tile for 5 stamina to see how close the blight is`;
+    document.getElementById("marco-radar-owned").textContent = radarUnlocked ? "Unlocked" : "Not unlocked";
+    const button = document.getElementById("marco-radar-btn");
+    button.disabled = !!radarUnlocked;
+    button.textContent = radarUnlocked ? "Owned" : "Unlock";
+    document.getElementById("tool-radar").classList.toggle("hidden", !radarUnlocked);
+  }
+  if (lensPrice !== undefined) {
+    document.getElementById("marco-lens-info").textContent = `${fmt(lensPrice)} coins  -  shows a predator's route until the day ends`;
+    document.getElementById("marco-lens-owned").textContent = `You have ${lensesOwned}`;
+  }
+  document.getElementById("marco-ward-info").textContent = `${fmt(wardPrice)} coins  -  3 or more linked Wards form a barrier`;
+  document.getElementById("marco-ward-owned").textContent = `You have ${wardsOwned}`;
+  document.getElementById("marco-spray-info").textContent = `${fmt(sprayPrice)} coins  -  cleanses one blighted tile`;
+  document.getElementById("marco-spray-owned").textContent = `You have ${spraysOwned}`;
+  document.getElementById("ward-count").textContent = wardsOwned;
+  document.getElementById("spray-count").textContent = spraysOwned;
+}
+function nightQty() {
+  const typed = parseInt(document.getElementById("marco-night-qty").value, 10);
+  return Math.max(1, Math.min(999, Number.isFinite(typed) ? typed : 1));
+}
+function marcoBuyWard() { callPythonAction("buy_ward_action", nightQty()); }
+function marcoBuySpray() { callPythonAction("buy_spray_action", nightQty()); }
+function marcoBuyLens() { callPythonAction("buy_lens_action", nightQty()); }
+function marcoBuyRadar() { callPythonAction("buy_radar_action"); }
+function marcoBuyLockbox() { callPythonAction("buy_lockbox_action"); }
+
+// updateRaid(show, rows, value, size, capacity, tableCells, memoSolved, protectedLabel)  (Topic 11)
+// rows: what the Magpie would take tonight, as [stackKey, emoji, plantName, mutation, count]. Only sent while a Lens is active.
+function updateRaid(show, rows, value, size, capacity, tableCells, memoSolved, protectedLabel) {
+  const panel = document.getElementById("raid-panel");
+  panel.classList.toggle("hidden", !show);
+  if (!show) return;
+  document.getElementById("raid-icon").innerHTML = PixelArt.magpieImg(32);
+  rows = toPlain(rows);
+  document.getElementById("raid-summary").textContent = rows.length
+    ? `It can carry ${capacity} and would take plants worth ${fmt(value)} coins (using ${size} of its ${capacity} carrying space). Sell them first, or give it a worse haul.`
+    : `It can carry ${capacity} but your Inventory holds nothing it could take.`;
+  document.getElementById("raid-list").innerHTML = rows.map(([key, emoji, name, mutation, count]) => `
+    <div class="triage-row"><span class="shrink-0">${mutSprite(emoji, name, mutation, 32)}</span>
+      <span class="flex-1">${keyLabel(key)}</span><span class="font-bold">x${count}</span></div>`).join("");
+  document.getElementById("raid-dp").textContent = rows.length
+    ? `It chose by dynamic programming: a table of ${fmt(tableCells)} cells (bottom-up), or ${fmt(memoSolved)} sub-questions with memoization.` : "";
+  document.getElementById("raid-lock").textContent = protectedLabel ? `Your Lockbox keeps the ${protectedLabel} safe.` : "";
+}
+
+// updateRegistry(rows, buckets, entries, loadPercent, collisions, rehashes, bucketSizes)  (Topic 6)
+// rows: each Ward as [tile, dayPlaced, "barrier" | "lone"]. bucketSizes[i] = how many Wards share bucket i.
+function updateRegistry(rows, buckets, entries, loadPercent, collisions, rehashes, bucketSizes) {
+  const panel = document.getElementById("registry-panel");
+  panel.classList.toggle("hidden", entries === 0);
+  if (entries === 0) return;
+  document.getElementById("registry-list").innerHTML = toPlain(rows).map(([pos, day, status]) => `
+    <div class="triage-row"><span class="flex-1">Ward at row ${Math.floor(pos / 10) + 1}, column ${pos % 10 + 1} (tile ${pos})</span>
+      <span class="text-emerald-300/70">placed Day ${day}</span><span class="font-bold ${status === "barrier" ? "text-yellow-300" : ""}">${status}</span></div>`).join("");
+  document.getElementById("registry-stats").textContent =
+    `${buckets} buckets, ${entries} Ward${entries === 1 ? "" : "s"}, load ${loadPercent}%, ${collisions} collision${collisions === 1 ? "" : "s"}, ${rehashes} rehash${rehashes === 1 ? "" : "es"}.`;
+  document.getElementById("registry-buckets").innerHTML = toPlain(bucketSizes).map((n, i) =>
+    `<span class="bucket b${Math.min(n, 2)}" title="bucket ${i}: ${n} Ward${n === 1 ? "" : "s"}"></span>`).join("");
+}
+
+// updateRadar(where, summary, rings, binarySteps, linearSteps, count, note)  (Topic 9)
+// rings[i] = how many blighted tiles are within i + 1 steps of the scanned tile. Empty "where" hides the panel.
+function updateRadar(where, summary, rings, binarySteps, linearSteps, count, note) {
+  const panel = document.getElementById("radar-panel");
+  panel.classList.toggle("hidden", !where);
+  if (!where) return;
+  rings = toPlain(rings);
+  document.getElementById("radar-where").textContent = `Scan of ${where}`;
+  document.getElementById("radar-summary").textContent = summary;
+  const most = Math.max(1, ...rings);
+  document.getElementById("radar-bars").innerHTML = rings.map((n, i) => `
+    <div class="radar-row"><span class="radar-label">within ${i + 1}</span>
+      <span class="radar-track"><span class="radar-bar" style="width:${Math.round(100 * n / most)}%"></span></span>
+      <span class="radar-count">${n}</span></div>`).join("");
+  document.getElementById("radar-search").textContent = count > 0
+    ? `Answering those ${rings.length} questions on ${count} distance${count === 1 ? "" : "s"}: binary search took ${binarySteps} steps, linear search ${linearSteps}.`
+    : `There were no distances to search.`;
+  document.getElementById("radar-note").textContent = note;
+}
+function useLens() { callPythonAction("use_lens_action"); }
+function quickDefend() { callPythonAction("quick_defend_action"); }
+function rescueTriage() { callPythonAction("rescue_action"); }
+
+// updateTriage(rows, table, usedName)  (Topic 8)
+// rows: infected plants already sorted by Python, as [tile, emoji, name, stage, value]
+// table: what each sorting algorithm would have cost on this list, as [name, comparisons, moves, speed, stable]
+const RESCUE_COUNT = 3;   // how many plants Rescue cures at most (matches Python)
+function updateTriage(rows, table, used) {
+  rows = toPlain(rows);
+  table = toPlain(table);
+  const board = document.getElementById("triage-board");
+  board.classList.toggle("hidden", rows.length === 0);
+  if (rows.length === 0) return;
+  document.getElementById("triage-list").innerHTML = rows.map(([pos, emoji, name, stage, value], i) => `
+    <div class="triage-row${i < RESCUE_COUNT ? " next" : ""}">
+      <span class="triage-rank">#${i + 1}</span>
+      <span class="shrink-0">${symbol(emoji, name, 32)}</span>
+      <span class="flex-1">${name} <span class="text-emerald-300/70">(row ${Math.floor(pos / 10) + 1}, column ${pos % 10 + 1}, ${stage})</span></span>
+      <span class="font-bold">${fmt(value)}c</span>
+    </div>`).join("");
+  document.getElementById("triage-table").innerHTML =
+    `<tr class="text-emerald-300/80"><th class="text-left">Sort</th><th class="text-right">Comparisons</th><th class="text-right">Moves</th><th class="text-left pl-3">Speed</th><th class="text-left">Stable</th></tr>` +
+    table.map(([name, comparisons, moves, speed, stable]) =>
+      `<tr class="${name === used ? "triage-used" : ""}"><td>${name}${name === used ? " (used)" : ""}</td><td class="text-right">${fmt(comparisons)}</td><td class="text-right">${fmt(moves)}</td><td class="pl-3">${speed}</td><td>${stable}</td></tr>`).join("");
+}
+
+// showGameOver(message): the blight covered every tile
+function showGameOver(message) {
+  document.getElementById("gameover-text").textContent = message;
+  document.getElementById("gameover-art").innerHTML = PixelArt.blightImg(0, 96);
+  document.getElementById("gameover-overlay").classList.remove("hidden");
 }
 
 function marcoBuySeed(name) {
@@ -575,39 +1080,105 @@ function marcoBuyWaterFull() { callPythonAction("buy_water_full_action"); }
 function marcoBuyTonic() { callPythonAction("buy_tonic_action"); }
 function useTonic() { callPythonAction("use_tonic_action"); }
 
-// updateInventory(rows: list of [name, emoji, qty, sellPrice])
-function updateInventory(rows) {
-  const list = document.getElementById("inventory-list");
-  list.innerHTML = "";
-  document.getElementById("inventory-empty").classList.toggle("hidden", rows && rows.length > 0);
-  (rows || []).forEach(([name, emoji, qty, sellPrice]) => {
-    const row = document.createElement("div");
-    row.className = "flex items-center gap-3 rounded-xl border border-emerald-900 bg-[#1b2219] px-3 py-2";
-    row.innerHTML = `
-      <span class="text-2xl">${emoji}</span>
-      <div class="flex-1">
-        <div class="text-sm font-bold text-white">${name} <span class="text-emerald-300/80 font-normal">x${qty}</span></div>
-        <div class="text-xs text-emerald-300/80">Sells for ${fmt(sellPrice)}c each</div>
-      </div>
-      <button class="text-xs font-bold bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg">Sell All</button>
-    `;
-    row.querySelector("button").addEventListener("click", () => sellToMarket(name));
-    list.appendChild(row);
-  });
+// A small arrow next to a price that an event is currently moving: up 30% / down 25%.
+function trendBadge(modifier) {
+  const pct = Math.round(((modifier === undefined ? 1 : modifier) - 1) * 100);
+  if (!pct) return "";
+  return pct > 0
+    ? ` <span class="text-emerald-400 font-bold">\u25b2 +${pct}%</span>`
+    : ` <span class="text-rose-400 font-bold">\u25bc ${pct}%</span>`;
 }
 
-// updateMarket(rows: list of [name, emoji, qty, sellPrice], total: int)
+// updateInventory(rows: list of [key, emoji, qty, sellPrice, modifier, plantName, mutation, mutationMultiplier])
+// Rows arrive already searched and sorted by Python (see GardenGame.inventory_view).
+// key is the plant name, or "Plant::Mutation" for a mutated stack.
+let inventoryRows = [];
+let inventorySelected = null;
+const INVENTORY_MIN_SLOTS = 16;   // a backpack always shows some empty slots
+
+// The Search box and the sort menu both go to Python, which owns the filtering and the order.
+function inventoryViewChanged() {
+  const hook = pyodideInstance ? pyodideInstance.globals.get("inventory_view_action") : null;
+  if (!hook) return;
+  try {
+    hook(document.getElementById("inventory-sort").value, document.getElementById("inventory-search").value);
+  } catch (err) {
+    showToast("Python error: " + err.message.trim().split("\n").pop());
+  } finally {
+    hook.destroy();
+  }
+}
+
+function selectInventorySlot(name) {
+  inventorySelected = name;
+  renderInventory();
+}
+
+function updateInventory(rows) {
+  inventoryRows = toPlain(rows);
+  if (!inventoryRows.some(r => r[0] === inventorySelected)) inventorySelected = null;
+  renderInventory();
+}
+
+function renderInventory() {
+  const grid = document.getElementById("inventory-grid");
+  const detail = document.getElementById("inventory-detail");
+  const searching = document.getElementById("inventory-search").value.trim() !== "";
+  const empty = document.getElementById("inventory-empty");
+  empty.textContent = searching ? "No plants match that search." : "Nothing harvested yet.";
+  empty.classList.toggle("hidden", inventoryRows.length > 0);
+  grid.innerHTML = "";
+  inventoryRows.forEach(([key, emoji, qty, , , plantName, mutation, mult]) => {
+    const slot = document.createElement("button");
+    slot.type = "button";
+    slot.className = "inv-slot" + (mutation ? " mutated" : "") + (key === inventorySelected ? " selected" : "");
+    if (mutation) slot.style.setProperty("--mc", mutLook(mutation).color);
+    slot.title = `${keyLabel(key)} \u00d7${fmt(qty)}` + (mutation ? ` (sells x${mult})` : "");
+    slot.innerHTML = mutSprite(emoji, plantName || key, mutation, 48) + (mutation ? mutBadge(mutation) : "") + `<span class="cnt">${fmt(qty)}</span>`;
+    slot.addEventListener("click", () => selectInventorySlot(key));
+    grid.appendChild(slot);
+  });
+  for (let i = inventoryRows.length; i < INVENTORY_MIN_SLOTS; i++) {
+    const slot = document.createElement("div");
+    slot.className = "inv-slot empty";
+    grid.appendChild(slot);
+  }
+  const picked = inventoryRows.find(r => r[0] === inventorySelected);
+  if (!picked) {
+    detail.innerHTML = '<span class="text-xs text-emerald-300/80">Pick a slot to see its price.</span>';
+    return;
+  }
+  const [key, emoji, qty, sellPrice, modifier, plantName, mutation, mult] = picked;
+  const mutChip = mutation
+    ? `<span class="mut-chip" style="--mc:${mutLook(mutation).color}">${PixelArt.icon(mutLook(mutation).icon, 16, mutLook(mutation).color)} ${mutation} x${mult}</span>` : "";
+  detail.innerHTML = `
+    <span class="shrink-0">${mutSprite(emoji, plantName || key, mutation, 48)}</span>
+    <div class="flex-1">
+      <div class="text-sm font-bold text-white">${keyLabel(key)} <span class="text-emerald-300/80 font-normal">x${fmt(qty)}</span> ${mutChip}</div>
+      <div class="text-xs text-emerald-300/80">Sells for ${fmt(sellPrice)}c each${trendBadge(modifier)}</div>
+    </div>
+    <button id="inv-sell" class="text-xs font-bold bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5">Sell All</button>
+    <button id="inv-remove" class="text-xs font-bold bg-rose-800 hover:bg-rose-700 text-white px-3 py-1.5">Remove</button>
+  `;
+  document.getElementById("inv-sell").addEventListener("click", () => sellToMarket(key, qty));
+  document.getElementById("inv-remove").addEventListener("click", () => removeFromInventory(key, qty));
+}
+
+// updateMarket(rows: list of [key, emoji, qty, sellPrice, modifier, plantName, mutation, mutationMultiplier], total: int)
 function updateMarket(rows, total) {
   const list = document.getElementById("market-list");
   list.innerHTML = "";
   document.getElementById("market-empty").classList.toggle("hidden", rows && rows.length > 0);
-  (rows || []).forEach(([name, emoji, qty, sellPrice]) => {
+  toPlain(rows).forEach(([key, emoji, qty, sellPrice, modifier, plantName, mutation, mult]) => {
     const row = document.createElement("div");
     row.className = "flex items-center gap-3 rounded-xl border border-amber-900 bg-amber-950/30 px-3 py-2";
+    if (mutation) row.style.borderColor = mutLook(mutation).color;
+    const tag = mutation
+      ? ` <span class="mut-chip" style="--mc:${mutLook(mutation).color}">${PixelArt.icon(mutLook(mutation).icon, 16, mutLook(mutation).color)} x${mult}</span>` : "";
     row.innerHTML = `
-      <span class="text-2xl">${emoji}</span>
-      <div class="flex-1 text-sm font-bold text-white">${name} <span class="text-amber-300/80 font-normal">x${qty}</span></div>
-      <span class="text-xs font-bold text-amber-300">${fmt(sellPrice * qty)}c</span>
+      <span class="shrink-0">${mutSprite(emoji, plantName || key, mutation, 32)}</span>
+      <div class="flex-1 text-sm font-bold text-white">${keyLabel(key)} <span class="text-amber-300/80 font-normal">x${qty}</span>${tag}</div>
+      <span class="text-xs font-bold text-amber-300">${fmt(sellPrice * qty)}c${trendBadge(modifier)}</span>
     `;
     list.appendChild(row);
   });
@@ -636,10 +1207,10 @@ function renderActionStack() {
 
 function showToast(msg) {
   const toast = document.createElement("div");
-  toast.className = "fixed bottom-6 right-6 bg-emerald-900 border border-emerald-400 text-white px-5 py-3 rounded-2xl shadow-2xl z-50 text-sm";
+  toast.className = "toast fixed bottom-6 right-6 text-white px-5 py-3 z-50 text-sm";
   toast.textContent = msg;
   document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 2500);
+  setTimeout(() => toast.remove(), Math.min(9000, 2500 + 45 * Math.max(0, String(msg).length - 50)));   // longer messages stay longer
 }
 
 async function runPythonCode() {
@@ -773,7 +1344,7 @@ function switchTab(tab) {
   ["game", "code", "book", "inventory", "market", "marco"].forEach(name => {
     const button = document.getElementById("tab-" + name);
     document.getElementById("view-" + name).classList.toggle("hidden", tab !== name);
-    button.classList.toggle("bg-[#283623]", tab === name);
+    button.classList.toggle("bg-[#6b4423]", tab === name);
     button.classList.toggle("text-emerald-100", tab === name);
     button.classList.toggle("text-emerald-400/80", tab !== name);
   });
@@ -781,7 +1352,8 @@ function switchTab(tab) {
 
 window.onload = async () => {
   document.getElementById("version-badge").textContent = "v" + APP_VERSION;
-  lucide.createIcons();
+  hydratePixelIcons();
+  startBootAnimation();
   renderGarden();
   renderActionStack();
 
@@ -807,4 +1379,4 @@ window.onload = async () => {
 
   // Start the game by itself: load Python, then run every topic in order.
   autoStartGame();
-};
+};
