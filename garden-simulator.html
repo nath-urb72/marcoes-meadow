@@ -9,34 +9,80 @@
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
 <script src="pixel-art.js"></script>
 <script src="script.js" defer></script>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=Press+Start+2P&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
-body {
-  font-family: 'Pixelify Sans', ui-monospace, sans-serif;
-  background-color: #2a1a0f;
-  color: #f3f4f6;
-}
-
-.code-font { font-family: 'JetBrains Mono', monospace; }
-
-.glass-panel {
-  background: rgba(40, 54, 35, 0.45);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(120, 143, 114, 0.2);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-}
-
-/* Traversal Compare rows (state classes are toggled from script-test.js) */
-.tv-row { transition: opacity .2s, box-shadow .2s, background-color .2s; }
-.tv-row.unvisited { opacity: .25; }
-.tv-row.unvisited .tv-num { visibility: hidden; }
-.tv-row.current { box-shadow: 0 0 0 2px #fcd34d; background-color: #6b4a22; }
-.tv-row.linked { box-shadow: 0 0 0 2px #38bdf8; opacity: 1; }
-</style>
-<link rel="stylesheet" href="pixel-theme.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body class="min-h-screen p-4 flex flex-col justify-between overflow-x-hidden">
+
+  <!-- Night scene (Stage 4): walk home, sleep, spooky time-lapse, dawn -->
+  <div id="night-scene" class="hidden" data-phase="dusk" aria-hidden="true">
+    <div class="ns-sky sky-dusk"></div><div class="ns-sky sky-night"></div><div class="ns-sky sky-eerie"></div><div class="ns-sky sky-dawn"></div>
+    <div class="ns-stars" id="ns-stars"></div>
+    <div class="ns-moon"></div>
+    <div class="ns-stage" id="ns-stage">
+      <canvas id="ns-house" width="64" height="44"></canvas>
+      <div id="ns-player"><img class="px" alt=""></div>
+      <div class="ns-eyes" id="ns-eyes"></div>
+      <span class="ns-zzz">z z z</span>
+    </div>
+    <div class="ns-fog"></div><div class="ns-fog ns-fog2"></div>
+    <div class="ns-vignette"></div><div class="ns-flash"></div>
+    <p id="ns-caption" class="ns-caption" aria-live="polite"></p>
+    <button type="button" class="ns-skip" onclick="skipNight()">Skip</button>
+  </div>
+
+  <!-- Morning summary (Stage 4) -->
+  <div id="morning-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="morning-title">
+    <div class="glass-panel morning-card">
+      <h2 id="morning-title">Good morning!</h2>
+      <div id="morning-body"></div>
+      <button type="button" class="ts-btn morning-btn" onclick="closeMorning()">Start the day</button>
+    </div>
+  </div>
+
+  <!-- Title screen -->
+  <div id="title-screen" role="dialog" aria-label="Title screen">
+    <div class="ts-sun"></div>
+    <div class="ts-cloud" style="top:13%;--d:70s;--delay:-10s"></div>
+    <div class="ts-cloud" style="top:26%;--d:95s;--delay:-55s;--s:.7"></div>
+    <div class="ts-cloud" style="top:7%;--d:82s;--delay:-30s;--s:1.3"></div>
+    <div class="ts-hill ts-hill-back"></div>
+    <div class="ts-hill ts-hill-front"></div>
+    <div class="ts-ground"><div id="ts-sprites" class="ts-sprites"></div></div>
+    <div class="ts-content">
+      <p class="ts-kicker">a cozy, python-powered</p>
+      <h1 class="ts-logo">Garden<br>Simulator</h1>
+      <p class="ts-kicker">choose your gardener</p>
+      <div id="ts-chars" class="ts-chars"></div>
+      <button id="ts-play" class="ts-btn" disabled onclick="startGameFromTitle()">Loading...</button>
+      <p id="ts-status" class="ts-status" aria-live="polite">Waking up the garden...</p>
+    </div>
+    <button class="ts-dev" onclick="openDevEditor()" title="Code Lab" aria-label="Open the Code Lab">&lt;/&gt;</button>
+  </div>
+
+  <!-- Code Lab: hidden from players, opened by the </> button on the title screen -->
+  <div id="dev-modal" class="hidden" role="dialog" aria-modal="true" aria-label="Code Lab">
+    <div class="dev-wrap">
+      <button class="dev-close" onclick="closeDevEditor()" aria-label="Close the Code Lab">X</button>
+          <div id="view-code" class="glass-panel rounded-2xl p-6 flex flex-col flex-grow">
+        <h2 class="font-bold mb-3 flex items-center gap-2">
+          <span data-px="code" data-s="24" class="inline-flex shrink-0"></span> Student Code Editor (Lab)
+        </h2>
+        <select id="topic-selector" onchange="loadTopic()" class="w-full bg-[#1f130a] border border-emerald-700 rounded-xl p-3 mb-4 text-sm"></select>
+        <textarea id="code-editor" readonly class="flex-1 bg-[#150c06] border border-emerald-800 rounded-xl p-4 code-font text-sm font-medium leading-relaxed" spellcheck="false"></textarea>
+        <div class="mt-4 flex gap-3">
+          <button onclick="runPythonCode()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2">
+            <span data-px="play" data-s="16" class="inline-flex shrink-0"></span> Run Python Code
+          </button>
+          <button onclick="runAllTopics()" class="flex-1 bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 py-3 rounded-xl font-bold text-emerald-200 flex items-center justify-center gap-2">
+            <span data-px="ff" data-s="16" class="inline-flex shrink-0"></span> Run All Topics
+          </button>
+        </div>
+        <div id="output-console" class="mt-4 bg-black/70 border border-emerald-900 rounded-xl p-4 text-xs max-h-48 overflow-auto font-mono whitespace-pre-wrap"></div>
+      </div>
+    </div>
+  </div>
+
 
   <!-- Boot screen: shown while Python loads and the topics run by themselves. -->
   <div id="boot-overlay" class="fixed inset-0 z-40 flex items-center justify-center bg-[#2a1a0f]/90 backdrop-blur-sm p-4">
@@ -51,86 +97,52 @@ body {
     </div>
   </div>
 
-  <header class="w-full max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-2 border-b border-[#7a5530]/40">
-    <div>
-      <div class="flex items-center gap-2">
-        <h1 class="text-2xl font-extrabold tracking-tight text-emerald-100">Python-Based Garden Simulator</h1>
-        <span id="version-badge" class="text-[10px] font-bold uppercase tracking-widest text-emerald-400/90 bg-emerald-950/50 border border-emerald-800/60 px-2 py-0.5 rounded-full"></span>
+  <header id="hud">
+    <span id="version-badge" class="hidden"></span>
+    <div class="hud-group">
+      <div class="nav-wrap">
+        <button id="burger" onclick="toggleNav(event)" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu"><span class="bars"></span></button>
+        <nav id="nav-menu" class="hidden" aria-label="Game menu">
+      <button onclick="switchTab('game')" id="tab-game" class="bg-[#6b4423]" title="Garden" aria-label="Garden"><span data-px="sprout" data-s="32" class="inline-flex"></span></button>
+      <button onclick="switchTab('book')" id="tab-book" class="" title="Plant Book" aria-label="Plant Book"><span data-px="book" data-s="32" class="inline-flex"></span></button>
+      <button onclick="switchTab('inventory')" id="tab-inventory" class="" title="Inventory" aria-label="Inventory"><span data-px="bag" data-s="32" class="inline-flex"></span></button>
+      <button onclick="switchTab('market')" id="tab-market" class="" title="Market" aria-label="Market"><span data-px="store" data-s="32" class="inline-flex"></span></button>
+      <button onclick="switchTab('marco')" id="tab-marco" class="" title="Marco's Shop" aria-label="Marco's Shop"><span data-px="barrel" data-s="32" class="inline-flex"></span></button>
+        </nav>
       </div>
-      <p class="text-xs text-emerald-300/80 font-medium">SDG 2, 13, 15</p>
+      <div class="hud-chip hud-day"><span class="hud-lab">DAY</span><b id="day-counter">1</b></div>
+      <div class="hud-chip hud-meter"><span class="hud-lab">STAMINA</span><span id="stamina-text">100 / 100</span><div class="hud-track"><div id="stamina-bar" style="width: 100%"></div></div></div>
+      <div class="hud-chip hud-meter"><span class="hud-lab">WATER</span><span id="water-text">0 / 200 L</span><div class="hud-track"><div id="water-bar" style="width: 0%"></div></div></div>
+      <div class="hud-chip hud-coins"><span data-px="coin" data-s="16" class="inline-flex"></span><b id="coins-text">0 Coins</b></div>
     </div>
-    <div class="flex items-center gap-3">
-      <div class="glass-panel px-4 py-2 rounded-xl flex flex-col items-end">
-        <span class="text-[10px] text-emerald-400 uppercase tracking-widest font-bold">DAY</span>
-        <span class="text-lg font-extrabold text-white" id="day-counter">1</span>
-      </div>
-      <div class="glass-panel px-4 py-2 rounded-xl flex flex-col items-end min-w-[120px]">
-        <span class="text-[10px] text-emerald-400 uppercase tracking-widest font-bold">STAMINA</span>
-        <span class="text-sm font-extrabold text-emerald-300" id="stamina-text">100 / 100</span>
-        <div class="w-full bg-[#1f130a] h-1.5 rounded-full overflow-hidden mt-1">
-          <div id="stamina-bar" class="bg-gradient-to-r from-lime-500 to-emerald-400 h-full rounded-full" style="width: 100%"></div>
-        </div>
-      </div>
-      <button onclick="useTonic()" title="Use a Stamina Tonic" class="glass-panel px-4 py-2 rounded-xl text-xs font-bold text-emerald-200 hover:text-white flex items-center gap-2">
-        <span data-px="tonic" data-s="16" class="inline-flex"></span> Tonic ×<span id="tonic-count">0</span>
-      </button>
-      <button onclick="endDay()" class="glass-panel px-4 py-2 rounded-xl text-xs font-bold text-amber-300 hover:text-amber-100 flex items-center gap-2">
-        <span data-px="moon" data-s="16" class="inline-flex shrink-0"></span> End Day
-      </button>
+    <div class="hud-group">
+      <button onclick="togglePanels()" id="panels-btn" class="hud-btn" title="Journal: history and night-defense boards" aria-label="Journal"><span data-px="scroll" data-s="16" class="inline-flex"></span> Journal</button>
+      <button onclick="endDay()" class="hud-btn hud-end"><span data-px="moon" data-s="16" class="inline-flex"></span> End Day</button>
     </div>
   </header>
 
-  <div id="fx-chips" class="hidden w-full max-w-7xl mx-auto flex flex-wrap items-center gap-2 mb-3"></div>
+  <div id="fx-chips" class="hidden w-full max-w-[1700px] mx-auto flex flex-wrap items-center gap-2 mb-3"></div>
 
-  <main class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-4 flex-grow">
-
-    <!-- LEFT: RESOURCES -->
-    <section id="resources-section" class="lg:col-span-3 glass-panel rounded-2xl p-4">
-      <h2 class="text-base font-bold text-emerald-200 border-b border-[#7a5530]/30 pb-2 mb-4 flex items-center gap-2">
-        <span data-px="barrel" data-s="16" class="inline-flex shrink-0"></span> Resource Storage
-      </h2>
-      <div class="space-y-4">
-        <div>
-          <div class="flex justify-between text-xs font-semibold">
-            <span class="flex items-center gap-1.5 text-blue-300">Water Reserves</span>
-            <span id="water-text">0 / 200 L</span>
-          </div>
-          <div class="w-full bg-[#1f130a] h-2.5 rounded-full overflow-hidden">
-            <div id="water-bar" class="bg-gradient-to-r from-blue-500 to-cyan-400 h-full rounded-full" style="width: 0%"></div>
-          </div>
-        </div>
-        <div>
-          <div class="flex justify-between text-xs font-semibold">
-            <span class="flex items-center gap-1.5 text-yellow-200">Coins / Dues</span>
-            <span id="coins-text" class="text-yellow-200">0 Coins</span>
-          </div>
-        </div>
-      </div>
-    </section>
+  <main class="w-full max-w-[1700px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-4 flex-grow">
 
     <!-- CENTER -->
-    <section class="lg:col-span-6 flex flex-col gap-4">
-      <div class="flex flex-wrap max-w-full bg-[#24160c] p-1.5 rounded-xl border border-emerald-800/40 w-fit">
-        <button onclick="switchTab('game')" id="tab-game" class="px-4 py-1.5 rounded-lg text-xs font-bold bg-[#6b4423] text-emerald-100">Interactive Sanctuary</button>
-        <button onclick="switchTab('code')" id="tab-code" class="px-4 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100">Student Code Editor</button>
-        <button onclick="switchTab('book')" id="tab-book" class="px-4 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100">Plant Book</button>
-        <button onclick="switchTab('inventory')" id="tab-inventory" class="px-4 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100">Inventory</button>
-        <button onclick="switchTab('market')" id="tab-market" class="px-4 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100">Market</button>
-        <button onclick="switchTab('marco')" id="tab-marco" class="px-4 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100">Marco</button>
-      </div>
+    <section class="lg:col-span-6 xl:col-span-7 flex flex-col gap-4">
 
-      <div id="view-game" class="glass-panel rounded-2xl p-6 min-h-[380px]">
-        <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
-          <div>
-            <h2 class="text-lg font-bold text-white">Sanctuary Garden Grid</h2>
-            <p class="text-xs text-emerald-300">Pick a tool, then click a tile.</p>
+      <div id="view-game">
+        <p id="predator-status" class="hidden text-xs font-bold text-purple-300 mb-2"></p>
+        <div id="garden-stage">
+          <div class="bg-layer bg-sky"><span class="ts-cloud" style="top:10px;--d:90s;--delay:-20s;--s:.6"></span><span class="ts-cloud" style="top:26px;--d:120s;--delay:-80s;--s:.45"></span></div>
+          <div class="bg-layer bg-hills"></div>
+          <div class="bg-layer" id="bg-trees"></div>
+          <div id="garden-wrap">
+            <div id="garden-grid" class="grid grid-cols-10 gap-1"></div>
+            <div id="player" class="hidden"><div class="p-flip"><img class="px p-img" alt="Player" draggable="false"></div></div>
           </div>
-          <div class="flex items-start gap-2 min-w-0">
-            <span class="text-xs text-emerald-300 pt-2">Seed Bag:</span>
-            <div id="seed-tray" class="flex flex-wrap justify-end gap-1.5 max-w-[19rem] max-h-[7.5rem] overflow-y-auto"></div>
-            <select id="crop-selector" class="hidden"></select>
-          </div>
+          <div class="bg-layer" id="bg-fg"></div>
+          <button id="marco-npc" onclick="switchTab('marco')" title="Marco's Shop" aria-label="Visit Marco's shop"></button>
         </div>
+        <div id="hotbar">
+          <div id="seed-tray"></div><select id="crop-selector" class="hidden"></select>
         <div id="tool-selector" class="flex bg-[#24160c] p-1.5 rounded-xl border border-emerald-800/40 w-fit mb-4">
           <button onclick="selectTool('plant')" id="tool-plant" data-tool="plant" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#6b4423] text-emerald-100"><span data-px="sprout" data-s="16" class="inline-flex"></span> Plant</button>
           <button onclick="selectTool('water')" id="tool-water" data-tool="water" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400/80 hover:text-emerald-100"><span data-px="drop" data-s="16" class="inline-flex"></span> Water</button>
@@ -142,35 +154,6 @@ body {
           <button onclick="quickDefend()" id="quick-defend" title="Spends up to 3 of your Wards on the Shadow Hound's route" class="inline-flex items-center gap-1.5 px-3 py-1.5 ml-2 rounded-lg text-xs font-bold bg-[#4a2a6a] hover:bg-[#5d3585] text-purple-100 border border-purple-400/40"><span data-px="shield" data-s="16" class="inline-flex"></span> Quick-Defend</button>
           <button onclick="rescueTriage()" id="rescue-btn" title="Spends up to 3 Cleansing Sprays on the most valuable infected plants" class="inline-flex items-center gap-1.5 px-3 py-1.5 ml-1 rounded-lg text-xs font-bold bg-[#4a2a6a] hover:bg-[#5d3585] text-purple-100 border border-purple-400/40"><span data-px="spray" data-s="16" class="inline-flex"></span> Rescue</button>
         </div>
-        <p id="predator-status" class="hidden text-xs font-bold text-purple-300 mb-2"></p>
-        <div id="garden-grid" class="grid grid-cols-10 gap-1"></div>
-        <div id="radar-panel" class="hidden mt-4 triage-board">
-          <h3 class="font-bold text-emerald-200 mb-1">Blight Radar</h3>
-          <p id="radar-where" class="text-xs text-emerald-300/80 mb-1"></p>
-          <p id="radar-summary" class="text-sm text-white mb-2"></p>
-          <div id="radar-bars" class="space-y-1 mb-2"></div>
-          <p id="radar-search" class="text-xs text-emerald-300/80"></p>
-          <p id="radar-note" class="text-xs text-emerald-300/70 mt-1"></p>
-        </div>
-        <div id="raid-panel" class="hidden mt-4 triage-board">
-          <div class="flex items-center gap-2 mb-1"><span id="raid-icon"></span><h3 class="font-bold text-purple-200">Magpie raid tonight</h3></div>
-          <p id="raid-summary" class="text-sm text-white mb-2"></p>
-          <div id="raid-list" class="space-y-1 mb-2"></div>
-          <p id="raid-dp" class="text-xs text-emerald-300/80"></p>
-          <p id="raid-lock" class="text-xs text-yellow-300 mt-1"></p>
-        </div>
-        <div id="registry-panel" class="hidden mt-4 triage-board">
-          <h3 class="font-bold text-emerald-200 mb-1">Ward Registry</h3>
-          <p class="text-xs text-emerald-300/80 mb-2">A hash table: each Ward's tile number is hashed to pick one of the buckets below.</p>
-          <div id="registry-list" class="space-y-1 mb-2"></div>
-          <p id="registry-stats" class="text-xs text-emerald-300/80"></p>
-          <div id="registry-buckets" class="flex flex-wrap gap-1 mt-1"></div>
-        </div>
-        <div id="triage-board" class="hidden mt-4 triage-board">
-          <h3 class="font-bold text-purple-200 mb-1">Rescue Triage</h3>
-          <p class="text-xs text-emerald-300/80 mb-2">Infected plants, most valuable first. Rescue cures the top 3 (as many Sprays as you have).</p>
-          <div id="triage-list" class="space-y-1 mb-3"></div>
-          <table id="triage-table" class="w-full text-xs"></table>
         </div>
       </div>
 
@@ -236,8 +219,12 @@ body {
           <h2 class="text-lg font-bold text-white flex items-center gap-2">
             <span data-px="box" data-s="24" class="inline-flex shrink-0"></span> Inventory
           </h2>
-          <p class="text-xs text-emerald-300">Plants you own, fresh from the harvest. Pick a slot to sell or remove it.</p>
+          <p class="text-xs text-emerald-300">Your supplies and harvest. Only harvested plants can be sold.</p>
         </div>
+        <h3 class="inv-title">Supplies</h3>
+        <div id="supply-grid" class="inv-grid"></div>
+        <div id="supply-detail" class="inv-detail mb-4"></div>
+        <h3 class="inv-title">Harvest</h3>
         <div class="flex flex-wrap items-center gap-2 mb-4">
           <input id="inventory-search" type="search" placeholder="Search" autocomplete="off" oninput="inventoryViewChanged()" class="flex-1 min-w-[160px] bg-[#1f130a] border border-emerald-700 p-2 text-sm text-white">
           <select id="inventory-sort" onchange="inventoryViewChanged()" class="bg-[#1f130a] border border-emerald-700 p-2 text-sm text-white">
@@ -257,7 +244,7 @@ body {
             <h2 class="text-lg font-bold text-white flex items-center gap-2">
               <span data-px="store" data-s="24" class="inline-flex shrink-0"></span> Market
             </h2>
-            <p class="text-xs text-emerald-300">Everything staged here sells automatically when the day ends.</p>
+            <p class="text-xs text-emerald-300">Only harvested plants can be staged here. They sell automatically when the day ends.</p>
           </div>
         </div>
         <p id="market-empty" class="text-sm text-emerald-300/80 mb-3">Nothing staged for sale.</p>
@@ -267,7 +254,7 @@ body {
 
       <div id="view-marco" class="glass-panel rounded-2xl p-6 min-h-[380px] hidden">
         <div class="mb-4">
-          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2"><span data-marco class="inline-flex shrink-0"></span>
             <span data-px="bag" data-s="24" class="inline-flex shrink-0"></span> Merchant Marco
           </h2>
           <p class="text-xs text-emerald-300">Seeds, water, tonics and night supplies for the working gardener. Coins only!</p>
@@ -360,26 +347,39 @@ body {
         <div id="marco-seeds" class="space-y-2"></div>
       </div>
 
-          <div id="view-code" class="glass-panel rounded-2xl p-6 flex flex-col flex-grow hidden">
-        <h2 class="font-bold mb-3 flex items-center gap-2">
-          <span data-px="code" data-s="24" class="inline-flex shrink-0"></span> Student Code Editor (Lab)
-        </h2>
-        <select id="topic-selector" onchange="loadTopic()" class="w-full bg-[#1f130a] border border-emerald-700 rounded-xl p-3 mb-4 text-sm"></select>
-        <textarea id="code-editor" readonly class="flex-1 bg-[#150c06] border border-emerald-800 rounded-xl p-4 code-font text-sm font-medium leading-relaxed" spellcheck="false"></textarea>
-        <div class="mt-4 flex gap-3">
-          <button onclick="runPythonCode()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2">
-            <span data-px="play" data-s="16" class="inline-flex shrink-0"></span> Run Python Code
-          </button>
-          <button onclick="runAllTopics()" class="flex-1 bg-[#4a3019] hover:bg-[#5d3d20] border border-emerald-700 py-3 rounded-xl font-bold text-emerald-200 flex items-center justify-center gap-2">
-            <span data-px="ff" data-s="16" class="inline-flex shrink-0"></span> Run All Topics
-          </button>
-        </div>
-        <div id="output-console" class="mt-4 bg-black/70 border border-emerald-900 rounded-xl p-4 text-xs max-h-48 overflow-auto font-mono whitespace-pre-wrap"></div>
-      </div>
     </section>
 
     <!-- RIGHT PANEL -->
-    <section class="lg:col-span-3 flex flex-col gap-4">
+    <section class="lg:col-span-3 xl:col-span-3 flex flex-col gap-4">
+        <div id="radar-panel" class="hidden mt-4 triage-board">
+          <h3 class="font-bold text-emerald-200 mb-1">Blight Radar</h3>
+          <p id="radar-where" class="text-xs text-emerald-300/80 mb-1"></p>
+          <p id="radar-summary" class="text-sm text-white mb-2"></p>
+          <div id="radar-bars" class="space-y-1 mb-2"></div>
+          <p id="radar-search" class="text-xs text-emerald-300/80"></p>
+          <p id="radar-note" class="text-xs text-emerald-300/70 mt-1"></p>
+        </div>
+        <div id="raid-panel" class="hidden mt-4 triage-board">
+          <div class="flex items-center gap-2 mb-1"><span id="raid-icon"></span><h3 class="font-bold text-purple-200">Magpie raid tonight</h3></div>
+          <p id="raid-summary" class="text-sm text-white mb-2"></p>
+          <div id="raid-list" class="space-y-1 mb-2"></div>
+          <p id="raid-dp" class="text-xs text-emerald-300/80"></p>
+          <p id="raid-lock" class="text-xs text-yellow-300 mt-1"></p>
+        </div>
+        <div id="registry-panel" class="hidden mt-4 triage-board">
+          <h3 class="font-bold text-emerald-200 mb-1">Ward Registry</h3>
+          <p class="text-xs text-emerald-300/80 mb-2">A hash table: each Ward's tile number is hashed to pick one of the buckets below.</p>
+          <div id="registry-list" class="space-y-1 mb-2"></div>
+          <p id="registry-stats" class="text-xs text-emerald-300/80"></p>
+          <div id="registry-buckets" class="flex flex-wrap gap-1 mt-1"></div>
+        </div>
+        <div id="triage-board" class="hidden mt-4 triage-board">
+          <h3 class="font-bold text-purple-200 mb-1">Rescue Triage</h3>
+          <p class="text-xs text-emerald-300/80 mb-2">Infected plants, most valuable first. Rescue cures the top 3 (as many Sprays as you have).</p>
+          <div id="triage-list" class="space-y-1 mb-3"></div>
+          <table id="triage-table" class="w-full text-xs"></table>
+        </div>
+
       <div id="climate-queue-panel" class="glass-panel rounded-2xl p-4">
         <h3 class="font-bold text-emerald-400 mb-3 flex items-center gap-2">
           <span data-px="cloud" data-s="16" class="inline-flex shrink-0"></span> Climate Queue (FIFO)
@@ -421,4 +421,4 @@ body {
     </div>
   </div>
 </body>
-</html>
+</html>

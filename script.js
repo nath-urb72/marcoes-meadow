@@ -293,6 +293,7 @@ function handleTileClick(row, col) {
 }
 
 function runTileClick(row, col) {
+  playerAct(row, col, selectedTool);
   const hook = pyodideInstance ? pyodideInstance.globals.get("handle_tile_click") : null;
   if (!hook) { showToast(notReadyMessage()); return; }
   const plantName = document.getElementById("crop-selector").value;
@@ -325,7 +326,7 @@ let currentDay = 1;
 function endDay() {
   confirmAction("endday", `End Day ${currentDay}?`,
     "Plants grow, climate events roll, and everything in the Market sells. Anything you haven't done today is left undone.",
-    () => callPythonAction("end_day_action"), false);
+    () => playNightSequence(), false);
 }
 
 function sellToMarket(key, qty) {
@@ -865,6 +866,7 @@ function updateScreenEffects(names) {
   layer.innerHTML = "";
   chips.innerHTML = "";
   const active = toPlain(names).filter(name => FX[name]);
+  document.body.dataset.weather = active.length ? WEATHER_THEME[active[0]] : "";   // the UI palette follows the weather
   chips.classList.toggle("hidden", active.length === 0);
   active.forEach(name => {
     const fx = FX[name];
@@ -915,7 +917,7 @@ function updateShop(seedRows, waterPrice, water, waterMax, tonicPrice, tonicRest
     missing > 0 ? `Refill to Full (${fmt(missing * waterPrice)}c)` : "Water is full";
   document.getElementById("marco-tonic-info").textContent = `+${tonicRestore} stamina  -  ${fmt(tonicPrice)} coins`;
   document.getElementById("marco-tonic-owned").textContent = `You have ${tonicsOwned}`;
-  document.getElementById("tonic-count").textContent = tonicsOwned;     // the button in the header
+  supplies.tonic = tonicsOwned; renderSupplies();                      // Tonics live in the Inventory now
 
   const list = document.getElementById("marco-seeds");
   list.innerHTML = "";
@@ -967,6 +969,11 @@ function updateNightShop(wardPrice, wardsOwned, sprayPrice, spraysOwned, lensPri
   document.getElementById("marco-spray-owned").textContent = `You have ${spraysOwned}`;
   document.getElementById("ward-count").textContent = wardsOwned;
   document.getElementById("spray-count").textContent = spraysOwned;
+  supplies.ward = wardsOwned; supplies.spray = spraysOwned;
+  if (lensesOwned !== undefined) supplies.lens = lensesOwned;
+  if (radarUnlocked !== undefined) supplies.radar = !!radarUnlocked;
+  if (lockboxUnlocked !== undefined) supplies.lockbox = !!lockboxUnlocked;
+  renderSupplies();
 }
 function nightQty() {
   const typed = parseInt(document.getElementById("marco-night-qty").value, 10);
@@ -1274,7 +1281,7 @@ async function runAllTopics() {
 function notReadyMessage() {
   return pythonBusy
     ? "The garden is still getting ready..."
-    : "The garden hasn't started yet. Open the Student Code Editor and press Run All Topics.";
+    : "The garden hasn't started yet. Open the Code Lab (the </> button on the title screen) and press Run All Topics.";
 }
 
 function showBootError(reason) {
@@ -1282,6 +1289,7 @@ function showBootError(reason) {
   document.getElementById("boot-title").textContent = "The garden couldn't start";
   document.getElementById("boot-status").textContent = reason;
   document.getElementById("boot-actions").classList.remove("hidden");
+  setTitleReady(false, reason);
 }
 
 // Loads Python (Pyodide), then runs every topic in order. Safe to call again as a retry.
@@ -1289,7 +1297,8 @@ async function autoStartGame() {
   if (pythonBusy) return;
   pythonBusy = true;
   const overlay = document.getElementById("boot-overlay");
-  const setStatus = (msg) => { document.getElementById("boot-status").textContent = msg; };
+  const setStatus = (msg) => { document.getElementById("boot-status").textContent = msg; setTitleStatus(msg); };
+  setTitleBusy();
   document.getElementById("boot-spinner").classList.remove("hidden");
   document.getElementById("boot-title").textContent = "Preparing the garden...";
   document.getElementById("boot-actions").classList.add("hidden");
@@ -1306,6 +1315,7 @@ async function autoStartGame() {
     const result = await runAllTopicsCore();
     if (!result.ok) throw new Error(`Topic ${result.failedTopic} failed: ${result.error}`);
     overlay.classList.add("hidden");
+    setTitleReady(true);
   } catch (err) {
     topicLoadError = topicTemplates[1].code ? topicLoadError : err.message;
     const hint = topicTemplates[1].code ? "" :
@@ -1318,7 +1328,7 @@ async function autoStartGame() {
 
 function dismissBootOverlay() {
   document.getElementById("boot-overlay").classList.add("hidden");
-  switchTab("code");
+  openDevEditor();
 }
 
 function loadTopic() {
@@ -1340,10 +1350,11 @@ function loadTopic() {
 }
 
 function switchTab(tab) {
+  closeNav();
   if (tab !== "book") pauseTraversal();
-  ["game", "code", "book", "inventory", "market", "marco"].forEach(name => {
+  ["game", "book", "inventory", "market", "marco"].forEach(name => {
     const button = document.getElementById("tab-" + name);
-    document.getElementById("view-" + name).classList.toggle("hidden", tab !== name);
+    document.getElementById("view-" + name).classList.toggle("hidden", name === "game" ? false : tab !== name);   // the garden is always on screen; the rest are windows
     button.classList.toggle("bg-[#6b4423]", tab === name);
     button.classList.toggle("text-emerald-100", tab === name);
     button.classList.toggle("text-emerald-400/80", tab !== name);
@@ -1353,6 +1364,8 @@ function switchTab(tab) {
 window.onload = async () => {
   document.getElementById("version-badge").textContent = "v" + APP_VERSION;
   hydratePixelIcons();
+  // cosmetic setup must never stop the game from booting
+  [buildTitleScreen, buildStage, buildNightScene, initWindows].forEach((fn) => { try { fn(); } catch (err) { console.error(fn.name + " failed:", err); } });
   startBootAnimation();
   renderGarden();
   renderActionStack();
@@ -1372,11 +1385,324 @@ window.onload = async () => {
   } catch (err) {
     topicLoadError = err.message;
     console.error("loadTopicCode failed:", err);
-    showToast("Could not load " + TOPICS_PY_URL + " - open the Student Code Editor tab for details.");
+    showToast("Could not load " + TOPICS_PY_URL + " - open the Code Lab (</> on the title screen) for details.");
   }
   loadTopic();
   switchTab("game");
 
   // Start the game by itself: load Python, then run every topic in order.
   autoStartGame();
-};
+};
+
+// ---- Title screen & Code Lab (Stage 1) ----
+let titleReady = false;
+
+function buildTitleScreen() {
+  const row = [["Carrot", 3], ["Sunflower", 2], ["Tomato", 3], ["Strawberry", 1], ["Sunflower", 3], ["Carrot", 2], ["Tomato", 3]];
+  renderCharPicker();
+  document.getElementById("ts-sprites").innerHTML = row.map(([name, stage], i) =>
+    `<span class="ts-sprite" style="--delay:${(-i * 0.37).toFixed(2)}s">${PixelArt.img(name, stage, 64)}</span>`).join("");
+}
+
+function setTitleStatus(msg) { document.getElementById("ts-status").textContent = msg; }
+
+function setTitleBusy() {
+  titleReady = false;
+  const btn = document.getElementById("ts-play");
+  btn.disabled = true;
+  btn.textContent = "Loading...";
+}
+
+function setTitleReady(ready, failReason) {
+  titleReady = ready;
+  const btn = document.getElementById("ts-play");
+  btn.disabled = false;
+  btn.textContent = ready ? "Play" : "Try again";
+  setTitleStatus(ready ? "Your garden is ready!" : failReason);
+}
+
+function startGameFromTitle() {
+  if (!titleReady) { autoStartGame(); return; }          // after a failed boot the button retries
+  const title = document.getElementById("title-screen");
+  title.classList.add("leaving");
+  setTimeout(() => title.classList.add("hidden"), 600);
+}
+
+function openDevEditor() { document.getElementById("dev-modal").classList.remove("hidden"); }
+function closeDevEditor() { document.getElementById("dev-modal").classList.add("hidden"); }
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDevEditor(); });
+
+
+// ---- Stage 2: burger menu, Inventory supplies, weather themes ----
+const WEATHER_THEME = { "Drought": "drought", "Cold Snap": "frost", "Festival Demand": "festival", "Market Glut": "glut", "Snowstorm": "snow", "Drizzle": "rain", "Market Rally": "rally" };
+
+function toggleNav(e) {
+  e.stopPropagation();
+  const menu = document.getElementById("nav-menu");
+  const open = menu.classList.toggle("hidden") === false;
+  document.getElementById("burger").setAttribute("aria-expanded", open);
+}
+function closeNav() {
+  document.getElementById("nav-menu").classList.add("hidden");
+  document.getElementById("burger").setAttribute("aria-expanded", "false");
+}
+document.addEventListener("click", (e) => { if (!e.target.closest(".nav-wrap")) closeNav(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeNav(); });
+
+// Everything Marco sells that isn't a seed or water. Only harvested plants (below) can be sold.
+const supplies = { tonic: 0, ward: 0, spray: 0, lens: 0, radar: false, lockbox: false };
+let supplySelected = "tonic";
+const SUPPLY_INFO = {
+  tonic:   { label: "Stamina Tonic",   icon: "tonic",  color: "#d28bff", note: "Restores stamina.", use: () => useTonic() },
+  ward:    { label: "Ward",            icon: "ward",   color: "#f4c93c", note: "3 or more linked Wards form a barrier against the blight." },
+  spray:   { label: "Cleansing Spray", icon: "spray",  color: "#79c63e", note: "Cleanses one blighted tile." },
+  lens:    { label: "Scout's Lens",    icon: "lens",   color: "#4a9be0", note: "Shows a predator's route until the day ends." },
+  radar:   { label: "Blight Radar",    icon: "radar",  color: "#b06af5", note: "Pick the Radar tool, then click a tile to scan it." },
+  lockbox: { label: "Lockbox",         icon: "lock",   color: "#c9b98f", note: "Keeps your most valuable stack safe from the Magpie." },
+};
+
+function renderSupplies() {
+  const grid = document.getElementById("supply-grid");
+  const detail = document.getElementById("supply-detail");
+  if (!grid) return;
+  const owned = Object.keys(SUPPLY_INFO).filter(id => supplies[id]);
+  if (!owned.includes(supplySelected)) supplySelected = owned[0] || null;
+  grid.innerHTML = "";
+  owned.forEach(id => {
+    const info = SUPPLY_INFO[id], n = supplies[id] === true ? 0 : supplies[id];
+    const slot = document.createElement("button");
+    slot.type = "button";
+    slot.className = "inv-slot" + (id === supplySelected ? " selected" : "");
+    slot.title = info.label;
+    slot.innerHTML = PixelArt.icon(info.icon, 40, info.color) + (n ? `<span class="cnt">${fmt(n)}</span>` : "");
+    slot.addEventListener("click", () => { supplySelected = id; renderSupplies(); });
+    grid.appendChild(slot);
+  });
+  for (let i = owned.length; i < 6; i++) grid.insertAdjacentHTML("beforeend", '<div class="inv-slot empty"></div>');
+  if (!supplySelected) { detail.innerHTML = '<span class="text-xs text-emerald-300/80">No supplies yet. Marco sells tonics, wards and tools.</span>'; return; }
+  const info = SUPPLY_INFO[supplySelected], n = supplies[supplySelected];
+  detail.innerHTML = `<span class="shrink-0">${PixelArt.icon(info.icon, 40, info.color)}</span>
+    <div class="flex-1"><div class="text-sm font-bold text-white">${info.label}${n === true ? "" : ` <span class="text-emerald-300/80 font-normal">x${fmt(n)}</span>`}</div>
+    <div class="text-xs text-emerald-300/80">${info.note}</div></div>` + (info.use ? '<button id="supply-use" class="text-xs font-bold bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5">Use</button>' : "");
+  if (info.use) document.getElementById("supply-use").addEventListener("click", info.use);
+}
+
+
+// ---- Stage 3: living map border, player + Marco sprites, gardening animations, keybinds ----
+let playerChar = "girl";
+try { playerChar = localStorage.getItem("gardenPlayerChar") || "girl"; } catch (e) { /* storage unavailable: default */ }
+let playerTile = null, playerX = 0, walkTimer = null, actTimer = null, hoverIdx = null;
+const ACT_FX = { plant: ["sprout", "#79c63e"], water: ["drop", "#4a9be0"], harvest: ["basket", "#f4c93c"], shovel: ["shovel", "#e6d6a8"],
+                 ward: ["ward", "#f4c93c"], spray: ["spray", "#79c63e"], radar: ["radar", "#b06af5"] };
+const TOOL_KEYS = { p: "plant", w: "water", h: "harvest", s: "shovel" };
+
+function renderCharPicker() {
+  const box = document.getElementById("ts-chars");
+  box.innerHTML = Characters.names.map(id =>
+    `<button type="button" class="ts-char${id === playerChar ? " selected" : ""}" data-char="${id}" aria-pressed="${id === playerChar}">${Characters.img(id, "idle", 5)}<span>${Characters.data[id].name}</span></button>`).join("");
+  box.querySelectorAll("button").forEach(b => b.addEventListener("click", () => pickCharacter(b.dataset.char)));
+}
+function pickCharacter(id) {
+  playerChar = id;
+  try { localStorage.setItem("gardenPlayerChar", id); } catch (e) { /* ignore */ }
+  renderCharPicker();
+  document.querySelector("#player .p-img").src = Characters.url(id, "idle");
+}
+
+function buildStage() {
+  const trees = (n, size, color) => Array.from({ length: n }, (_, i) => `<span class="bg-tree" style="--i:${i}">${PixelArt.icon("tree", size, color)}</span>`).join("");
+  document.getElementById("bg-trees").innerHTML = `<div class="tree-row back">${trees(10, 40, "#3f7f26")}</div><div class="tree-row front">${trees(7, 54, "#2f6a1e")}</div>`;
+  const crops = ["Sunflower", "Strawberry", "Carrot", "Tomato"];
+  document.getElementById("bg-fg").innerHTML = Array.from({ length: 14 }, (_, i) => `<span class="bg-flower" style="--i:${i}">${PixelArt.img(crops[i % 4], 3, 26)}</span>`).join("");
+  document.getElementById("marco-npc").innerHTML = Characters.img("marco", "idle", 4);
+  document.querySelectorAll("[data-marco]").forEach(el => { el.innerHTML = Characters.img("marco", "idle", 3); });
+  const player = document.getElementById("player");
+  player.querySelector(".p-img").src = Characters.url(playerChar, "idle");
+  player.classList.remove("hidden");
+  const grid = document.getElementById("garden-grid");
+  new ResizeObserver(() => placePlayer(playerTile, true)).observe(grid);
+  grid.addEventListener("mouseover", (e) => { const t = e.target.closest(".tile"); hoverIdx = t ? [...grid.children].indexOf(t) : null; });
+  grid.addEventListener("mouseleave", () => { hoverIdx = null; });
+  const keys = { plant: "P", water: "W", harvest: "H", shovel: "S" };
+  Object.entries(keys).forEach(([tool, key]) => document.getElementById("tool-" + tool).insertAdjacentHTML("beforeend", `<kbd class="kbd">${key}</kbd>`));
+}
+
+function playerSpot(tile) {
+  const wrap = document.getElementById("garden-wrap"), wr = wrap.getBoundingClientRect();
+  const cell = tile && document.getElementById("garden-grid").children[tile.row * 10 + tile.col];
+  if (!cell) return [36, wr.height + 40];                       // home: on the path below the garden
+  const r = cell.getBoundingClientRect();
+  return [r.left - wr.left + r.width / 2, r.top - wr.top + r.height * 0.92];
+}
+function placePlayer(tile, instant) {
+  const p = document.getElementById("player");
+  const [x, y] = playerSpot(tile);
+  if (instant) p.style.transition = "none";
+  p.style.left = x + "px"; p.style.top = y + "px";
+  if (instant) { void p.offsetWidth; p.style.transition = ""; }
+  playerX = x;
+}
+function playerAct(row, col, tool) {
+  const p = document.getElementById("player"), img = p.querySelector(".p-img");
+  if (!p || p.classList.contains("hidden")) return;
+  clearInterval(walkTimer); clearTimeout(actTimer);
+  delete p.dataset.act;
+  const [x] = playerSpot({ row, col });
+  p.classList.toggle("face-left", x < playerX);
+  playerTile = { row, col };
+  let step = false;
+  walkTimer = setInterval(() => { step = !step; img.src = Characters.url(playerChar, step ? "step" : "idle"); }, 130);
+  placePlayer(playerTile);
+  actTimer = setTimeout(() => {
+    clearInterval(walkTimer); img.src = Characters.url(playerChar, "idle");
+    p.dataset.act = tool;
+    spawnActFx(row, col, tool);
+    actTimer = setTimeout(() => { delete p.dataset.act; }, 650);
+  }, 400);
+}
+function spawnActFx(row, col, tool) {
+  const [icon, color] = ACT_FX[tool] || ["heart", "#e0605a"];
+  const [x, y] = playerSpot({ row, col });
+  const fx = document.createElement("span");
+  fx.className = "act-fx act-" + tool;
+  fx.style.left = x + "px"; fx.style.top = (y - 24) + "px";
+  fx.innerHTML = PixelArt.icon(icon, 22, color);
+  document.getElementById("garden-wrap").appendChild(fx);
+  setTimeout(() => fx.remove(), 800);
+}
+
+function togglePanels() {
+  document.body.classList.toggle("journal-open");
+  placePlayer(playerTile, true);
+}
+
+// Keybinds: P / W / H / S pick Plant / Water / Harvest / Shovel; Space or Enter acts on the tile under the mouse.
+function gameActive() {
+  const hidden = (id) => { const el = document.getElementById(id); return !el || el.classList.contains("hidden"); };
+  return hidden("title-screen") && hidden("night-scene") && hidden("morning-modal") && hidden("dev-modal") && hidden("confirm-modal") && ["view-book", "view-inventory", "view-market", "view-marco"].every(hidden);
+}
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || !gameActive()) return;
+  const tool = TOOL_KEYS[e.key.toLowerCase()];
+  if (tool) { e.preventDefault(); selectTool(tool); }
+  else if ((e.key === " " || e.key === "Enter") && hoverIdx !== null) { e.preventDefault(); handleTileClick(Math.floor(hoverIdx / 10), hoverIdx % 10); }
+});
+
+
+// ---- Stage 4: end-of-day walk home, night time-lapse, morning summary ----
+let nightRunning = false, nightSkip = false, nightWake = null;
+const NIGHT_T = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0.15 : 1;
+const nightEsc = (s) => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+function buildNightScene() {
+  const cv = document.getElementById("ns-house"), g = cv.getContext("2d");
+  const R = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+  const stones = (x0, x1, y0, y1) => { for (let y = y0; y < y1; y += 2) for (let x = x0 + (y % 4); x < x1; x += 4) R("#7a7166", x, y, 2, 1); };
+  const roof = (cx, y0, y1, k) => { for (let y = y0; y < y1; y++) { const hw = Math.round((y - y0 + 1) * k); R(y % 2 ? "#b8433a" : "#a33a32", cx - hw, y, hw * 2, 1); R("#8f2f2a", cx + (hw >> 1), y, hw - (hw >> 1), 1); } };
+  R("#3c7a35", 0, 34, 64, 10);
+  for (let y = 34; y < 44; y++) for (let x = (y % 2) * 2; x < 64; x += 4) R("#356f30", x, y, 2, 1);
+  R("#a9895a", 22, 34, 12, 10); R("#8f7048", 22, 34, 1, 10); R("#8f7048", 33, 34, 1, 10);
+  R("#8d8478", 8, 18, 32, 16); stones(8, 40, 18, 34);
+  R("#8d8478", 42, 14, 12, 20); stones(42, 54, 14, 34);
+  roof(24, 6, 18, 1.5); roof(48, 4, 14, 0.62);
+  R("#6b6b6b", 13, 4, 4, 8); R("#4a4a4a", 13, 4, 4, 1);
+  const wins = [[12, 22, 4, 5], [33, 22, 4, 5], [46, 18, 4, 4], [46, 26, 4, 4]];
+  wins.forEach(([x, y, w, h]) => { R("#4a2e1c", x - 1, y - 1, w + 2, h + 2); R("#1b2a44", x, y, w, h); });
+  R("#4a2e1c", 21, 25, 8, 9); R("#5a3a22", 22, 26, 6, 8); R("#3a2412", 25, 26, 1, 8); R("#d9a441", 26, 30, 1, 1); R("#b8433a", 20, 24, 10, 1);
+  [[3, 26], [58, 28]].forEach(([cx, cy]) => { R("#5a3a22", cx, cy + 5, 2, 6); for (let dy = -5; dy <= 5; dy++) { const hw = Math.round(Math.sqrt(30 - dy * dy)); R(dy < 0 ? "#3f7f26" : "#2f6a1e", cx + 1 - hw, cy + dy, hw * 2, 1); } });
+  [[4, 37, 14], [44, 37, 14]].forEach(([x, y, w]) => { R("#6b4423", x, y, w, 5); for (let i = 0; i < w; i += 3) R("#79c63e", x + i + 1, y + 1, 1, 2); });
+  const stage = document.getElementById("ns-stage");
+  wins.concat([[22, 26, 6, 8]]).forEach(([x, y, w, h], i) => stage.insertAdjacentHTML("beforeend",
+    `<span class="ns-win${i === 4 ? " door" : ""}" style="left:${x / 0.64}%;top:${y / 0.44}%;width:${w / 0.64}%;height:${h / 0.44}%"></span>`));
+  document.getElementById("ns-stars").innerHTML = Array.from({ length: 55 }, () =>
+    `<i style="left:${Math.random() * 100}%;top:${Math.random() * 55}%;--d:${(1 + Math.random() * 2).toFixed(1)}s"></i>`).join("");
+  document.getElementById("ns-eyes").innerHTML = [[10, 86, 0], [46, 88, 1.1], [30, 94, 0.6], [57, 82, 1.7]].map(([x, y, d]) =>
+    `<i style="--x:${x}%;--y:${y}%;--delay:${d}s"></i>`).join("");
+}
+
+function nightWait(ms) {
+  return new Promise(res => { if (nightSkip) return res(); const t = setTimeout(res, ms * NIGHT_T); nightWake = () => { clearTimeout(t); res(); }; });
+}
+function skipNight() { nightSkip = true; if (nightWake) nightWake(); }
+function setNightPhase(name) {
+  const scene = document.getElementById("night-scene"), order = ["dusk", "night", "eerie", "dawn"];
+  scene.dataset.phase = name;
+  order.forEach((p, i) => scene.classList.toggle("ph-" + p, i <= order.indexOf(name)));
+}
+
+// The real night happens in Python (end_day_action); night_report_action returns what it recorded.
+function runEndDay() {
+  let msg = "", report = null;
+  const end = pyodideInstance.globals.get("end_day_action");
+  try { msg = end(); } catch (err) { showToast("Python error: " + err.message.trim().split("\n").pop()); } finally { end.destroy(); }
+  const rep = pyodideInstance.globals.get("night_report_action");
+  try { report = JSON.parse(rep()); } catch (err) { report = null; } finally { rep.destroy(); }
+  return { msg, report };
+}
+
+async function playNightSequence() {
+  if (nightRunning) return;
+  if (!pyodideInstance) { showToast(notReadyMessage()); return; }
+  nightRunning = true; nightSkip = false;
+  const scene = document.getElementById("night-scene"), player = document.getElementById("ns-player"), img = player.querySelector("img");
+  const say = (t) => { document.getElementById("ns-caption").textContent = t; };
+  scene.classList.remove("hidden", "lit", "show"); setNightPhase("dusk");
+  player.classList.remove("enter"); player.style.transition = "none"; player.style.left = "4%"; player.style.top = "88%";
+  img.src = Characters.url(playerChar, "idle");
+  void scene.offsetWidth;
+  scene.classList.add("show");
+  say("The sun is setting. Time to head home...");
+  await nightWait(700);
+  let step = false;
+  const walk = setInterval(() => { step = !step; img.src = Characters.url(playerChar, step ? "step" : "idle"); }, 140);
+  player.style.transition = "left 2s steps(16), top 2s steps(16)";
+  player.style.left = "38%"; player.style.top = "75%";
+  await nightWait(2100);
+  clearInterval(walk); img.src = Characters.url(playerChar, "idle");
+  player.classList.add("enter"); scene.classList.add("lit");
+  say("Lights out. Sweet dreams, little gardener...");
+  setNightPhase("night");
+  await nightWait(3200);
+  setNightPhase("eerie"); say("...but the garden is not quiet tonight.");
+  scene.classList.add("flash"); setTimeout(() => scene.classList.remove("flash"), 700);
+  const result = runEndDay();
+  if (result.report && result.report.night.length) say(result.report.night[0]);
+  await nightWait(3800);
+  setNightPhase("dawn"); scene.classList.remove("lit"); say("Dawn breaks...");
+  await nightWait(1800);
+  scene.classList.remove("show");
+  await nightWait(500);
+  scene.classList.add("hidden");
+  nightRunning = false; playerTile = null; placePlayer(null, true);
+  if (result.report && !result.report.over) showMorningSummary(result.report);
+  else if (result.msg) showToast(result.msg);
+}
+
+function showMorningSummary(r) {
+  const tally = (names) => Object.entries(names.reduce((a, n) => (a[n] = (a[n] || 0) + 1, a), {})).map(([n, k]) => `${k} ${nightEsc(n)}`).join(", ");
+  const li = (items, cls = "") => items.map(t => `<li class="${cls}">${nightEsc(t)}</li>`).join("");
+  const grew = r.grew.length ? [`${r.grew.length} plant${r.grew.length > 1 ? "s" : ""} grew a stage.`] : ["Nothing grew overnight. Plants only grow after a watering."];
+  const dark = r.night.concat(r.lost.length ? [`Lost: ${tally(r.lost)}.`] : [], r.infected.length ? [`Infected by the blight: ${tally(r.infected)}.`] : []);
+  const market = [r.earned ? `The Market paid out ${r.earned.toLocaleString()} coins.` : "Nothing sold overnight."].concat(r.prices.length ? [`Prices are back to normal for ${r.prices.join(", ")}.`] : []);
+  const block = (icon, title, body) => `<section class="morning-sec"><h3>${title}</h3><ul>${body}</ul></section>`;
+  document.getElementById("morning-title").textContent = `Day ${r.day} begins!`;
+  document.getElementById("morning-body").innerHTML =
+    block("sprout", "What grew", li(grew) + (r.ripe.length ? li([`Ready to harvest: ${tally(r.ripe)}.`], "good") : "")) +
+    block("moon", "What happened in the night", dark.length ? li(dark, "bad") : li(["A quiet night. Nothing came creeping."])) +
+    block("cloud", "Weather and events", r.events.length ? li(r.events) : li(["Clear skies and nothing unusual."])) +
+    block("coin", "The Market", li(market));
+  document.getElementById("morning-modal").classList.remove("hidden");
+}
+function closeMorning() { document.getElementById("morning-modal").classList.add("hidden"); }
+
+
+// ---- UI v2: windows float over the garden; Esc closes them and the Journal ----
+function initWindows() {
+  ["book", "inventory", "market", "marco"].forEach(n => document.getElementById("view-" + n)
+    .insertAdjacentHTML("afterbegin", '<button type="button" class="win-x" aria-label="Close window" onclick="switchTab(\'game\')">X</button>'));
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  document.body.classList.remove("journal-open");
+  if (!document.getElementById("view-game").classList.contains("hidden")) switchTab("game");
+});

@@ -1026,6 +1026,7 @@ class GardenGame:
 
     # ---- ending the day ----
     def end_day(self):
+        self.last_night = None            # Stage 4: filled in below for the morning summary
         if self.game_over:
             return "The blight took your garden. Press Restart to play again."
         self.lens_active = False           # a lens only lasts the day it was used
@@ -1041,6 +1042,8 @@ class GardenGame:
         self._market_bonus_pct = 0
 
         event_messages = self.process_daily_events()
+        daily_events = list(event_messages)
+        stages_before = {(r, c): p.stage for r, c, p in self.grid.each_plant()}
         for msg in event_messages:
             stack.push_action(msg)
 
@@ -1049,6 +1052,14 @@ class GardenGame:
                 plant.grow_one_day()
             plant.start_new_day()          # K1: always reset, frozen day or not
             self.grid.redraw(row, col)
+
+        grew, ripe = [], []                # Stage 4: what the growth tick changed
+        for row, col, plant in self.grid.each_plant():
+            if stages_before.get((row, col), plant.stage) != plant.stage:
+                grew.append(plant.name)
+                if plant.stage == "mature":
+                    ripe.append(plant.name)
+        post_growth = {(r, c): (p.name, p.infected) for r, c, p in self.grid.each_plant()}
 
         night = self._night()
         if night is not None:              # Topic 7: the night that ends today (before the day counter moves)
@@ -1068,6 +1079,11 @@ class GardenGame:
             if report:
                 event_messages.append(report)
                 stack.push_action(report)
+
+        night_reports = event_messages[len(daily_events):]
+        post_night = {(r, c): (p.name, p.infected) for r, c, p in self.grid.each_plant()}
+        lost = [v[0] for k, v in post_growth.items() if k not in post_night]
+        infected = [v[0] for k, v in post_night.items() if v[1] and not post_growth.get(k, ("", False))[1]]
 
         earned = self.market.payout(self.sell_price_for)
         if earned and self._market_bonus_pct:
@@ -1094,6 +1110,9 @@ class GardenGame:
         self.refresh_predator()
         self.refresh_triage()
 
+        self.last_night = {"day": self.day, "grew": grew, "ripe": ripe, "events": daily_events, "night": night_reports,
+                           "lost": lost, "infected": infected, "earned": earned, "prices": back_to_normal,
+                           "over": bool(night is not None and night.garden_wiped())}
         stack.push_action(f"Day ended - Day {self.day} begins")
         message = f"Day {self.day} begins. Everyone is rested."
         if event_messages:
@@ -1217,6 +1236,10 @@ def sell_to_market_action(name):
 
 def end_day_action():
     return game.end_day()
+
+def night_report_action():
+    import json
+    return json.dumps(getattr(game, "last_night", None))
 
 def inventory_view_action(sort_mode, query):
     game.inv_sort = sort_mode if sort_mode in ("recent", "low", "high") else "recent"

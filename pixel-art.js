@@ -444,3 +444,47 @@ const PixelArt = (() => {
   return { PLANTS: P, ORDER, TIERS, STAGES, ICONS, grid, url, img, icon, blightGrid, wardGrid, blightImg, wardImg, blightForStage, houndGrid, houndImg, magpieGrid, magpieImg };
 })();
 if (typeof module !== "undefined") module.exports = PixelArt;
+
+/* characters.js - code-drawn 12x16 characters: two player choices and Marco (NPC).
+   Characters.img(id, frame, scale) -> <img> HTML.  id: girl | boy | marco.  frame: idle | step (walk cycle). */
+const Characters = (() => {
+  const BASE = { o: "#2a1a0f", s: "#ffd9b0", r: "#e0605a", e: "#2a1a0f", w: "#fff3d6", k: "#5a3a2a" };
+  const LEGS_BOY = { idle: ["..obb..bbo..", "..obb..bbo..", "..kkk..kkk.."], step: ["..obb..bbo..", ".obb....bbo.", ".kkk....kkk."] };
+  const CH = {
+    girl: {
+      name: "Girl", pal: { h: "#7a4a2a", t: "#c9a2c9", b: "#4a4252" },
+      rows: ["...oooooo...", "..ohhhhhho..", ".ohhhhhhhho.", ".ohssssssho.", ".ohsessesho.", ".ohssrrssho.", "..ohssssho..",
+             ".ohttttttho.", ".ohttttttho.", ".ohttwwttho.", ".ohttwwttho.", "..obbbbbbo..", ".obbbbbbbbo."],
+      legs: { idle: ["...ss..ss...", "...ss..ss...", "..kkk..kkk.."], step: ["...ss..ss...", "..ss....ss..", ".kkk....kkk."] },
+    },
+    boy: {
+      name: "Boy", pal: { h: "#8a5a34", t: "#5a5a66", y: "#2f7fd0", b: "#3a3a44" },
+      rows: ["...oooooo...", "..ohhhhhho..", ".ohhhhhhhho.", ".ohhhhhhhho.", ".osesssseso.", ".ossssrrsso.", "..osssssso..",
+             "..otttttto..", ".owtwyywtwo.", ".owtwyywtwo.", ".osttttttso.", "..obbbbbbo..", "..obbbbbbo.."],
+      legs: LEGS_BOY,
+    },
+    marco: {
+      name: "Marco", pal: { y: "#d9a441", h: "#c9a56a", t: "#4a9b5a", b: "#6b4423" },
+      rows: ["..oyyyyyyo..", ".oyyyyyyyyo.", "oyyyyyyyyyyo", ".osssssssso.", ".osesssseso.", ".ohhhhhhhho.", "..ohhhhhho..",
+             "..otttttto..", ".otttwwttto.", ".ostwwwwtso.", ".ostwwwwtso.", "..owwwwwwo..", "..owwwwwwo.."],
+      legs: LEGS_BOY,
+    },
+  };
+  const cache = {};
+  function url(id, frame = "idle") {
+    const key = id + frame;
+    if (cache[key]) return cache[key];
+    const c = CH[id], rows = c.rows.concat(c.legs[frame] || c.legs.idle);
+    const cv = document.createElement("canvas");
+    cv.width = 12; cv.height = 16;
+    const g = cv.getContext("2d");
+    rows.forEach((row, y) => [...row].forEach((ch, x) => {
+      const col = c.pal[ch] || BASE[ch];
+      if (col) { g.fillStyle = col; g.fillRect(x, y, 1, 1); }
+    }));
+    return (cache[key] = cv.toDataURL());
+  }
+  const img = (id, frame = "idle", scale = 4, cls = "px") =>
+    `<img class="${cls}" src="${url(id, frame)}" width="${12 * scale}" height="${16 * scale}" alt="${CH[id].name}" draggable="false">`;
+  return { url, img, data: CH, names: ["girl", "boy"] };
+})();
