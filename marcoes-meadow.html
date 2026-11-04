@@ -155,7 +155,7 @@ input,select,textarea{border:2px solid #3b2314;background:#fff8e4;box-shadow:ins
  </section>
  <section class="win" id="w-inv"><button class="btn x" onclick="openWin()">Close</button><h2>Inventory</h2><p>Your supplies and harvest. Only harvested plants can be sold.</p>
   <h3>Supplies</h3><div class="inv" id="sup"></div><h3>Harvest</h3>
-  <div class="tabs"><input id="inv-q" placeholder="Search" oninput="invView()" style="flex:1"><select id="inv-s" onchange="invView()"><option value="recent">Recently harvested</option><option value="low">Lowest value</option><option value="high">Highest value</option></select></div>
+  <div class="tabs"><input id="inv-q" placeholder="Search" oninput="invView()" style="flex:1"><select id="inv-s" onchange="invView()"><option value="recent">Recently harvested</option><option value="low">Lowest value</option><option value="high">Highest value</option><option value="fast">Fastest growing</option><option value="slow">Slowest growing</option></select></div>
   <p id="inv-e">Nothing harvested yet.</p><div class="inv" id="inv-g"></div><div class="row" id="inv-d" style="display:none"></div></section>
  <section class="win" id="w-mkt"><button class="btn x" onclick="openWin()">Close</button><h2>Market</h2><button class="btn pri" onclick="openWin('marco')">Visit Marco's shop</button><p>Staged plants sell automatically when the day ends.</p>
   <p id="mk-e">Nothing staged for sale.</p><div id="mk-l"></div><p><b>Pending payout: <span id="mk-t">0</span> coins</b></p></section>
@@ -472,6 +472,9 @@ class Resources:
         updateResources(**self.values)
 
 
+INSERTION_LIMIT = 12   # distinct inventory stacks: at or below this the Inventory uses Insertion Sort
+
+
 class GardenGrid:
     def __init__(self, rows=10, cols=10):
         self.rows = rows
@@ -489,13 +492,24 @@ class GardenGrid:
 
     def place(self, row, col, plant):
         self.cells[row][col] = plant
+        table = globals().get("plant_table")      # Topic 6: tile number -> Plant (hash table)
+        if table is not None:
+            table.put(self.to_position(row, col), plant)
         self.redraw(row, col)
 
     def remove(self, row, col):
         plant = self.cells[row][col]
         self.cells[row][col] = None
+        table = globals().get("plant_table")
+        if table is not None:
+            table.remove(self.to_position(row, col))
         self.redraw(row, col)
         return plant
+
+    def plant_at(self, pos):
+        """O(1) average lookup of a plot's plant by tile number, through the hash table."""
+        table = globals().get("plant_table")
+        return table.get(pos) if table is not None else self.cells[pos // self.cols][pos % self.cols]
 
     def redraw(self, row, col):
         """Sends a tile's current look to the page. Topic 7's night system can override it:
@@ -792,7 +806,7 @@ class GardenGame:
         self.lens_active = False   # Topic 10: True once a lens is used, until the next End Day
         self.radar_unlocked = False  # Topic 9: bought once from Marco
         self.lockbox_unlocked = False  # Topic 11: bought once from Marco
-        self.inv_sort = "recent"   # Inventory screen: "recent" | "low" | "high"
+        self.inv_sort = "recent"   # Inventory screen: "recent" | "low" | "high" | "fast" | "slow"
         self.inv_query = ""        # Inventory screen: what the player typed in Search
         self.merchant = Merchant(self)
         # Reset to defaults at the start of every end_day(); an event firing during
@@ -1337,17 +1351,28 @@ class GardenGame:
                         if all(any(w.startswith(t) for w in stack_label(n).lower().split()) for t in words)}
             by_name = {n: row for n, row in by_name.items() if n in hits}
 
-        if self.inv_sort in ("low", "high"):    # SORT by today's sell price
-            if tree_class is not None:
-                value_tree = tree_class()
-                for name, row in by_name.items():
-                    value_tree.insert(row[3], name)
-                order = value_tree.inorder() if self.inv_sort == "low" else value_tree.reverse_inorder()
-            else:
-                order = sorted(by_name, key=lambda n: by_name[n][3], reverse=(self.inv_sort == "high"))
+        if self.inv_sort in ("low", "high", "fast", "slow"):   # SORT by sell price or growth duration
+            order = self.sort_stacks(list(by_name), by_name)
         else:                                   # RECENT: newest harvest first
             order = [n for n in reversed(self.inventory.recent) if n in by_name]
         return [by_name[name] for name in order]
+
+    def sort_stacks(self, names, by_name):
+        """Inventory sorting (Topic 8). Insertion Sort for a short list (the Inventory is small and
+        nearly sorted after each harvest); Merge Sort once it grows past INSERTION_LIMIT stacks.
+        Key = (value, name): name breaks ties so every algorithm gives the same order."""
+        def grow(n):
+            return PLANT_DATA[split_key(n)[0]]["grow_days"]
+        keys = {"low":  lambda n: (by_name[n][3], n),   "high": lambda n: (-by_name[n][3], n),
+                "fast": lambda n: (grow(n), n),          "slow": lambda n: (-grow(n), n)}
+        key = keys[self.inv_sort]
+        name = "Insertion" if len(names) <= INSERTION_LIMIT else "Merge"
+        sorts = globals().get("SORTS")
+        if sorts is None:                       # Topic 8 not loaded yet: plain fallback
+            return sorted(names, key=key)
+        ordered, stats = sorts[name][0](names, key)
+        self.last_sort = f"{name} sort, {stats.comparisons} comparisons"
+        return ordered
 
     def page_rows(self, rows):
         """[key, emoji, qty, price, event modifier, plant name, mutation or "", mutation multiplier]"""
@@ -1414,7 +1439,7 @@ def night_report_action():
     return json.dumps(getattr(game, "last_night", None))
 
 def inventory_view_action(sort_mode, query):
-    game.inv_sort = sort_mode if sort_mode in ("recent", "low", "high") else "recent"
+    game.inv_sort = sort_mode if sort_mode in ("recent", "low", "high", "fast", "slow") else "recent"
     game.inv_query = str(query or "")
     game.refresh_inventory()
 
@@ -2202,6 +2227,12 @@ class WardRegistry(HashTable):
 
 # ---- console demonstration (scratch tables, so the game is untouched) ----
 _tiles = [(i * 7) % 100 for i in range(1, 31)]               # 30 Wards at scattered tiles
+# Plant lookup: tile number -> Plant, separate chaining, rehash (double) above 0.75 load.
+if "plant_table" not in globals():
+    plant_table = HashTable()
+    for _r, _c, _p in game.grid.each_plant():
+        plant_table.put(game.grid.to_position(_r, _c), _p)
+
 _good = HashTable()
 _growth = []
 for _tile in _tiles:
