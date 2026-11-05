@@ -71,7 +71,7 @@ textarea{width:100%;height:230px;background:#2f2418;color:#f1e6c8;font-size:12px
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 body{background:#7fb349}#main{position:fixed;inset:0;padding:0}#fxbar{display:none!important}
-#stage{width:min(100vw,calc(100dvh*1.7778));aspect-ratio:16/9;border:0;border-radius:0;box-shadow:none;--gx:32.5%;--gy:31.1%;--gw:35%;--gh:54.4%;--mx:18.5%;--my:34%;--mw:9.9%;--mh:16.7%;--g0:#86b94e;--g1:#79ac45;--g2:#9ccb60;--path:#d8b176;--soil:#7a4e2c;--t1:#4f8a3a;--t2:#6aa84a;--t3:#8cc664;--rf:#c9552f}
+#stage{width:min(100vw,calc(100dvh*1.7778));aspect-ratio:16/9;border:0;border-radius:0;box-shadow:none;--gx:32.5%;--gy:30.55%;--gw:35%;--gh:55.55%;--mx:18.5%;--my:34%;--mw:9.9%;--mh:16.7%;--g0:#86b94e;--g1:#79ac45;--g2:#9ccb60;--path:#d8b176;--soil:#7a4e2c;--t1:#4f8a3a;--t2:#6aa84a;--t3:#8cc664;--rf:#c9552f}
 #marco{left:var(--mx);top:var(--my);width:var(--mw);height:var(--mh)}#marco img{display:none}
 .t{border-radius:16%;box-shadow:inset 0 0 0 2px rgba(255,220,160,.14),inset 0 -4px 0 rgba(0,0,0,.24)}.t img{object-fit:contain}
 .card{background:linear-gradient(#fffaf0,#f6ebcf);border:2.5px solid #c9a06a;border-radius:18px;box-shadow:0 3px 0 rgba(120,80,40,.35),0 8px 18px rgba(60,40,20,.25);padding:6px 12px;display:flex;align-items:center;gap:10px;font:800 20px 'Pixelify Sans',sans-serif;color:var(--bd)}
@@ -127,6 +127,43 @@ input,select,textarea{border:2px solid #3b2314;background:#fff8e4;box-shadow:ins
 .win .x{right:4px;top:2px}#seeds{padding:2px 4px}#toasts div{padding:2px 8px}
 @media (min-aspect-ratio:1/1){.card{padding:2px 6px}.card.notes{padding:0!important}.card.notes h4{margin:0}#seltool{padding:4px 8px!important}.big{width:104px;height:108px}}
 @media (max-aspect-ratio:1/1){.card,.big,#seeds,#toasts div,.win,#dlg>div{border-width:8px 7px 10px 7px!important;border-image-width:8px 7px 10px 7px!important}}
+/* ===== uniform square tiles, zoom layer, key hints ===== */
+#grid{left:50%;transform:translateX(-50%);width:auto;height:var(--gh);aspect-ratio:1/1;grid:repeat(10,minmax(0,1fr))/repeat(10,minmax(0,1fr));gap:1%}
+.t{min-width:0;min-height:0}.t img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#stage{touch-action:none}#world{position:absolute;inset:0;transform-origin:0 0;will-change:transform}#stage.pan,#stage.pan *{cursor:grabbing!important}
+.kb{position:absolute;left:11px;top:8px;font:800 13px/1 'Pixelify Sans',sans-serif;color:#3b2314;pointer-events:none}
+@media (max-aspect-ratio:1/1){.kb{display:none}}
+/* ===== glow animations: mutated harvest + climate queue ===== */
+@keyframes mglow{0%,100%{box-shadow:0 0 3px 1px var(--mc),0 0 9px 2px color-mix(in srgb,var(--mc) 50%,transparent),inset 0 0 5px color-mix(in srgb,var(--mc) 45%,transparent)}50%{box-shadow:0 0 6px 2px var(--mc),0 0 18px 5px color-mix(in srgb,var(--mc) 65%,transparent),inset 0 0 11px color-mix(in srgb,var(--mc) 75%,transparent)}}
+.slot.mu{z-index:1;border-color:var(--mc);box-shadow:0 0 8px 2px var(--mc),inset 0 0 8px color-mix(in srgb,var(--mc) 55%,transparent);animation:mglow 2.2s ease-in-out infinite}
+.mc{box-shadow:0 0 7px 1px var(--mc)}
+@keyframes qglow{0%,100%{filter:drop-shadow(0 0 3px var(--c)) drop-shadow(0 0 7px color-mix(in srgb,var(--c) 55%,transparent))}50%{filter:drop-shadow(0 0 6px var(--c)) drop-shadow(0 0 15px color-mix(in srgb,var(--c) 70%,transparent))}}
+@keyframes qin{0%,100%{opacity:.5}50%{opacity:1}}@keyframes qspin{to{transform:rotate(360deg)}}@keyframes qtw{0%,100%{opacity:.15}50%{opacity:1}}
+@keyframes qsheen{0%{background-position:-150% 0,0 0,17px 13px}60%,100%{background-position:250% 0,0 0,17px 13px}}
+@keyframes qfall{to{background-position:0 23px,10px 37px,20px 46px}}@keyframes qsnow{to{background-position:0 29px,14px 40px}}@keyframes qrain{to{background-position:0 23px,13px 40px}}
+@keyframes qdrift{from{background-position:0 0,100% 0}to{background-position:100% 0,0 0}}
+.row.qe{position:relative;overflow:hidden;isolation:isolate;border-color:var(--c)!important;filter:drop-shadow(0 0 5px var(--c));animation:qglow 2.6s ease-in-out infinite}
+.qe>b{position:relative;z-index:2}
+.qe::before{content:'';position:absolute;inset:0;pointer-events:none;z-index:0}
+.qe::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:1;box-shadow:inset 0 0 12px 1px color-mix(in srgb,var(--c) 70%,transparent);animation:qin 2.6s ease-in-out infinite}
+.qe[data-k=sun]::before{left:-450px;top:50%;right:auto;bottom:auto;width:900px;height:900px;margin-top:-450px;background:radial-gradient(circle,#fff3b0 0 12px,rgba(255,208,60,.75) 12px 20px,transparent 22px),repeating-conic-gradient(rgba(255,206,60,.6) 0 7deg,transparent 7deg 22deg);-webkit-mask:radial-gradient(circle,#000 0,transparent 68%);mask:radial-gradient(circle,#000 0,transparent 68%);animation:qspin 26s linear infinite}
+.qe[data-k=frost]::before,#evfx[data-k=frost]::before{background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.8) 50%,transparent 65%) -150% 0/60% 100% no-repeat,radial-gradient(circle,rgba(255,255,255,.95) 1.2px,transparent 2px) 0 0/34px 26px,radial-gradient(circle,rgba(150,215,255,.9) 1px,transparent 2px) 17px 13px/34px 26px;animation:qsheen 3.4s ease-in-out infinite}
+.qe[data-k=fest]::before,#evfx[data-k=fest]::before{background:radial-gradient(circle,#f0c050 2px,transparent 3px) 0 0/31px 23px,radial-gradient(circle,#4aa8d8 2px,transparent 3px) 10px 8px/37px 29px,radial-gradient(circle,#f06a9c 2px,transparent 3px) 20px 15px/43px 31px;animation:qfall 6s linear infinite}
+.qe[data-k=glut]::before,#evfx[data-k=glut]::before{background:radial-gradient(ellipse at 30% 50%,rgba(105,113,128,.5),transparent 60%),radial-gradient(ellipse at 75% 40%,rgba(85,93,108,.45),transparent 55%);background-size:160% 100%;animation:qdrift 9s ease-in-out infinite alternate}
+.qe[data-k=snow]::before,#evfx[data-k=snow]::before{background:radial-gradient(circle,#fff 0 2px,rgba(120,170,225,.8) 2.5px,transparent 3.5px) 0 0/37px 29px,radial-gradient(circle,#fff 0 1.5px,rgba(120,170,225,.8) 2px,transparent 3px) 14px 9px/23px 31px;animation:qsnow 4s linear infinite}
+.qe[data-k=rain]::before,#evfx[data-k=rain]::before{background:radial-gradient(ellipse 1.5px 6px,rgba(60,140,215,.85),transparent) 0 0/27px 23px,radial-gradient(ellipse 1.5px 6px,rgba(60,140,215,.7),transparent) 13px 11px/31px 29px;animation:qrain .9s linear infinite}
+.qe[data-k=rally]::before,#evfx[data-k=rally]::before{background:radial-gradient(circle,#ffc933 1.5px,transparent 3.5px) 8px 6px/38px 24px,radial-gradient(circle,#fff0a0 1.5px,transparent 3.5px) 27px 17px/38px 24px;animation:qtw 1.8s ease-in-out infinite}
+/* ===== active-event atmosphere: Active Event card + full-screen layer ===== */
+#evc.qe{position:relative;overflow:hidden;isolation:isolate;filter:drop-shadow(0 0 5px var(--c));animation:qglow 2.6s ease-in-out infinite}
+#evc.qe>*{position:relative;z-index:2}
+#evfx{position:fixed;inset:0;z-index:9;pointer-events:none;overflow:hidden}#evfx:not([data-k]){display:none}
+#evfx::before{content:'';position:absolute;left:0;top:0;width:calc(100%/2.2);height:calc(100%/2.2);transform:scale(2.2);transform-origin:0 0;opacity:.85}
+#evfx::after{content:'';position:absolute;inset:0;box-shadow:inset 0 0 80px 8px color-mix(in srgb,var(--c) 50%,transparent),inset 0 0 24px 2px var(--c)}
+#evfx[data-k=sun]::before{left:-1100px;top:-1100px;width:2200px;height:2200px;transform:none;opacity:1;background:radial-gradient(circle,rgba(255,226,120,.6),transparent 22%),repeating-conic-gradient(rgba(255,206,60,.3) 0 6deg,transparent 6deg 20deg);-webkit-mask:radial-gradient(circle,#000 0,transparent 60%);mask:radial-gradient(circle,#000 0,transparent 60%);animation:qspin 90s linear infinite}
+#evfx[data-k=fest]::before{animation-duration:1.8s}#evfx[data-k=snow]::before{animation-duration:2.6s}#evfx[data-k=rain]::before{animation-duration:.32s}
+@media (prefers-reduced-motion:reduce){.qe::before,.qe::after,#evfx::before,#evfx::after{animation:none!important}}
+#evfx[data-k=fest],#evfx[data-k=rally]::before{display:none}
+.gold i{width:10px;height:10px;background:#ffd45a;clip-path:polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%);--w:16px}.gold i:nth-child(3n){background:#fff0a0}
 </style></head><body>
 <header id="hud">
  <div class="card"><span data-ic="sun" data-s="40"></span><div><b>Day <span id="day">1</span></b><small id="sub" style="display:block">Clear skies</small></div></div>
@@ -138,11 +175,14 @@ input,select,textarea{border:2px solid #3b2314;background:#fff8e4;box-shadow:ins
 </header>
 <div id="fxbar"></div>
 <main id="main"><div id="stage" data-env="">
+ <div id="world">
  <canvas class="sc" id="sc" width="320" height="180" aria-hidden="true"></canvas>
  <div id="tint"></div><div id="grid" role="grid" aria-label="Garden, 10 by 10 plots"></div>
   <button id="marco" onclick="openWin('marco')" aria-label="Visit Marco's shop"><img alt=""></button>
+ </div>
  <div id="fx" aria-hidden="true"></div>
 </div></main>
+<div id="evfx" aria-hidden="true"></div>
 <footer id="hot"><div id="seeds"></div><div id="bar"></div></footer>
 <aside id="side"><div class="card" id="evc"><div>No active event</div></div><div class="card notes"><h4>Notifications</h4><div id="nl"><div>Welcome to your garden!</div></div></div></aside><div class="card" id="seltool"></div>
 
@@ -171,7 +211,6 @@ input,select,textarea{border:2px solid #3b2314;background:#fff8e4;box-shadow:ins
  <div id="d-morn"><h2 id="mo-t"></h2><div id="mo-b"></div><div class="tabs" style="justify-content:flex-end"><button class="btn pri" onclick="closeDlg()">Start the day</button></div></div>
  <div id="d-over" style="text-align:center"><div id="go-a"></div><h2>Game Over</h2><p id="go-t"></p><button class="btn pri" onclick="location.reload()">Restart</button></div></div>
 <div id="night" data-p="dusk"><div class="moon"></div><p id="n-cap"></p><button class="btn" onclick="nightSkip=1;nightWake&&nightWake()">Skip</button></div>
-<div id="toasts"></div>
 <script type="text/plain" id="garden-topics-py"># ===== TOPIC 1 =====
 # Topic 1: Python OOP + Big O + Stacks
 
@@ -809,13 +848,12 @@ class GardenGame:
         self.inv_sort = "recent"   # Inventory screen: "recent" | "low" | "high" | "fast" | "slow"
         self.inv_query = ""        # Inventory screen: what the player typed in Search
         self.merchant = Merchant(self)
-        # Reset to defaults at the start of every end_day(); an event firing during
-        # that day's event roll can change them for the day that's about to begin.
+        # Cleared in end_day(); the event drawn at dawn can set them for the new day.
         self.todays_events = []            # names of the events rolled at the last End Day (for screen effects)
         self.stamina_cost_multiplier = 1   # Cold Snap
         self.water_cost_multiplier = 1     # Drought (Water Rationing)
-        self._growth_frozen = False        # Snowstorm (Growth Freeze) - this day's tick only
-        self._market_bonus_pct = 0         # Market Rally - this end_day's payout only
+        self._growth_frozen = False        # Snowstorm (Growth Freeze) - blocks the growth tick at the end of the day it is active
+        self._market_bonus_pct = 0         # Market Rally - bonus on the payout at the end of the day it is active
 
     # ---- catalog (dynamic array) ----
     def find_plant(self, name):   # O(n) scan of the currently-unlocked catalog
@@ -1074,8 +1112,8 @@ class GardenGame:
         message = self._tired_notice() or f"Removed the {plant.name}. No refund."
         return f"{message} {rescue}" if rescue else message
 
-    # ---- daily events: 0-2 drawn from the Climate Queue when the day ends,
-    # not tied to planting, and not guaranteed every day ----
+    # ---- daily events: 0-1 drawn from the Climate Queue at dawn, so they take effect during
+    # that day. Not tied to planting, and not guaranteed every day ----
     def process_daily_events(self):
         messages = []
         self.todays_events = []
@@ -1127,7 +1165,7 @@ class GardenGame:
                 plant.update_stage()
                 self.grid.redraw(row, col)
                 watered += 1
-            return f"{event.name}! Automatically watered {watered} plant(s)."
+            return f"{event.name}! Rain automatically watered {watered} plant(s) this morning."
 
         if kind == "water_rationing":
             self.water_cost_multiplier = data.get("multiplier", 2)
@@ -1219,22 +1257,22 @@ class GardenGame:
         radar = globals().get("blight_radar")
         if radar is not None:
             radar.clear()                  # a radar reading is only true until the night changes things
-        # Reset every modifier BEFORE rolling events, so today's event roll decides
-        # what the NEW day looks like (and Growth Freeze can still block the growth
-        # tick a few lines down, since it fires before that tick runs).
+        # The event that is active TODAY (drawn at dawn) decides today's growth tick and today's
+        # Market payout, so remember those two before clearing every modifier. The NEW day's event
+        # is drawn at dawn, after the night, a few lines down.
+        frozen_today = self._growth_frozen       # Snowstorm: no natural growth tonight
+        bonus_today = self._market_bonus_pct     # Market Rally: bonus on today's payout
         self.stamina_cost_multiplier = 1
         self.water_cost_multiplier = 1
         self._growth_frozen = False
         self._market_bonus_pct = 0
 
-        event_messages = self.process_daily_events()
-        daily_events = list(event_messages)
+        event_messages = []
+        daily_events = []
         stages_before = {(r, c): p.stage for r, c, p in self.grid.each_plant()}
-        for msg in event_messages:
-            stack.push_action(msg)
 
         for row, col, plant in list(self.grid.each_plant()):
-            if not self._growth_frozen and not plant.infected:    # blight stops growth
+            if not frozen_today and not plant.infected:    # blight stops growth
                 plant.grow_one_day()
             plant.start_new_day()          # K1: always reset, frozen day or not
             self.grid.redraw(row, col)
@@ -1266,14 +1304,14 @@ class GardenGame:
                 event_messages.append(report)
                 stack.push_action(report)
 
-        night_reports = event_messages[len(daily_events):]
+        night_reports = list(event_messages)
         post_night = {(r, c): (p.name, p.infected) for r, c, p in self.grid.each_plant()}
         lost = [v[0] for k, v in post_growth.items() if k not in post_night]
         infected = [v[0] for k, v in post_night.items() if v[1] and not post_growth.get(k, ("", False))[1]]
 
         earned = self.market.payout(self.sell_price_for)
-        if earned and self._market_bonus_pct:
-            bonus = round(earned * self._market_bonus_pct / 100)
+        if earned and bonus_today:
+            bonus = round(earned * bonus_today / 100)
             earned += bonus
             event_messages.append(f"Market Rally bonus: +{bonus:,} coins!")
             stack.push_action(event_messages[-1])      # K3: also goes in the Action History
@@ -1286,6 +1324,18 @@ class GardenGame:
         if back_to_normal:
             event_messages.append("Prices are back to normal for " + ", ".join(back_to_normal) + ".")
             stack.push_action(event_messages[-1])
+
+        # Dawn: the new day's climate event comes off the queue and takes effect for that day.
+        before_dawn = {(r, c): p.stage for r, c, p in self.grid.each_plant()}
+        daily_events = self.process_daily_events()
+        for msg in daily_events:
+            stack.push_action(msg)
+            event_messages.append(msg)
+        for r, c, p in self.grid.each_plant():      # Drizzle can grow plants at dawn
+            if before_dawn.get((r, c), p.stage) != p.stage:
+                grew.append(p.name)
+                if p.stage == "mature":
+                    ripe.append(p.name)
 
         self.resources.sync()
         self.sync_stamina()
@@ -3612,7 +3662,7 @@ function drawScene(env=scEnv){scEnv=env;const cv=$('sc'),x=cv.getContext('2d');x
  R(0,0,320,180,P.g0);for(let i=0;i<150;i++)R(rnd()*320,rnd()*180,2+rnd()*6,1+rnd()*2,rnd()<.5?P.g1:P.g2);for(let i=0;i<110;i++)R(rnd()*320,rnd()*180,1,2,rnd()<.5?P.g1:P.g2);
  if(spr.grass){x.filter=F;for(let gy=0;gy<6;gy++)for(let gx=0;gx<10;gx++){x.save();x.translate(gx*32+(gx%2?32:0),gy*32+(gy%2?32:0));x.scale(gx%2?-1:1,gy%2?-1:1);x.drawImage(spr.grass,0,0);x.restore()}x.filter='none'}
  R(0,0,320,22,P.h1);R(0,0,320,12,P.h2);for(let i=0;i<24;i++){const cx=6+i*13.4+rnd()*4,by=16+rnd()*4,h=8+rnd()*3;R(cx,by,1,2,'#6b4a2a');for(let r=0;r<h;r++){const w=1+r;R(cx-(w>>1),by-h+r,w,1,r%2?P.t1:P.t2)}}
- R(155,44,10,12,P.path);R(86,74,16,8,P.path);R(100,52,120,106,O);R(101,53,118,104,'#5e3b20');
+ R(155,44,10,12,P.path);R(86,74,22,8,P.path);R(108,52,104,106,O);R(109,53,102,104,'#5e3b20');
  D(34,94,25,16,O);D(34,94,24,15,'#a39e90');D(34,94,20,12,P.water);R(22,88,14,1,'rgba(255,255,255,.45)');R(30,98,8,1,'rgba(255,255,255,.35)');R(36,76,22,11,O);R(37,77,20,9,'#a2713f');for(let i=0;i<4;i++)R(37,79+i*2,20,1,'#6b4429');
  if(spr.shop){D(75,90,17,2,'rgba(0,0,0,.2)');x.drawImage(spr.shop,58,60)}else{D(75,90,19,2,'rgba(0,0,0,.2)');R(59,76,32,13,O);R(60,77,30,11,'#a2713f');R(60,81,30,1,'#6b4429');R(60,66,2,12,'#7a4a26');R(88,66,2,12,'#7a4a26');for(let i=0;i<8;i++)R(58+i*4,61,4,6,i%2?'#fff':'#d34a3a');R(58,67,32,1,O);['#d9442e','#f0a030','#6a9a3a','#f2d040','#d9442e','#7a46a8'].forEach((c,i)=>R(63+i*4.5,74,3,3,c));}
  [[30,30,17],[72,14,9],[266,10,16],[296,26,12],[304,112,18],[24,128,18],[290,162,12],[52,162,10],[12,66,7],[314,62,9]].forEach(([a,b,r])=>{D(a+2,b+r,r,Math.max(2,r>>2),'rgba(0,0,0,.2)');const im=spr[r>=15?'t56':r>=10?'t40':'t28'];if(im){x.filter=F;x.drawImage(im,Math.round(a-im.width/2),Math.round(b+r-im.height+2));x.filter='none';return}R(a-1,b+r*.5,3,r*.6,'#7a5230');D(a,b,r,Math.round(r*.9),O);D(a,b,r-1,Math.round(r*.9)-1,P.t1);D(a-1,b-1,Math.round(r*.7),Math.round(r*.6),P.t2);D(a-Math.round(r*.25),b-Math.round(r*.3),Math.round(r*.3),Math.round(r*.25),P.t3)});
@@ -3620,14 +3670,14 @@ function drawScene(env=scEnv){scEnv=env;const cv=$('sc'),x=cv.getContext('2d');x
  if(spr.well)x.drawImage(spr.well,112,24);if(spr.house)x.drawImage(spr.house,160-(spr.house.width>>1),1)}
 function loadSprites(){['house','well','grass','shop','t56','t40','t28'].forEach(k=>{const i=new Image();i.onload=()=>{spr[k]=i;drawScene()};i.src=SPR[k]})}
 /* ---------- weather particles (visual only) ---------- */
-function setFx(env){const f=$('fx'),M={rain:['rain',44],snow:['snow',36],festival:['fest',26],drought:['dust',12],rally:['rally',14]}[env];f.className=M?M[0]:'';f.innerHTML=M?Array.from({length:M[1]},(_,i)=>`<i style="--x:${(i*97%100)}%;--d:${(env==='rain'?.9:env==='snow'?7:env==='festival'?5:12)+(i%5)*.4}s;--l:-${(i%9)*.8}s;--s:${3+i%4}px;--n:${i};--y:${10+(i*53%80)}%"></i>`).join(''):''}
-function setEnv(k){$('stage').dataset.env=k||'';setFx(k);drawScene(k||'')}
+function setFx(env){const f=$('fx'),M={rain:['rain',44],snow:['snow',36],festival:['fest',48],drought:['dust',12],rally:['gold',30]}[env];f.className=M?M[0]:'';f.innerHTML=M?Array.from({length:M[1]},(_,i)=>`<i style="--x:${(i*97%100)}%;--d:${(env==='rain'?.9:env==='snow'?7:env==='festival'?5:env==='rally'?7:12)+(i%5)*.4}s;--l:-${(i%9)*.8}s;--s:${3+i%4}px;--n:${i};--y:${10+(i*53%80)}%"></i>`).join(''):''}
+function setEnv(k){$('stage').dataset.env=k||'';drawScene(k||'')}
 /* ---------- state & bridge callbacks (Python calls these) ---------- */
 let py=null,plants={},seeds=[],seedSel='',tool='plant',curDay=1,pred={present:false,revealed:false,pos:-1,route:[]},hover=null,busy=false,hist=[];
 const sup={tonic:0,ward:0,spray:0,lens:0,radar:false,lockbox:false};let shop=null,nshop=null;
 const notes=[];function notify(m){notes.unshift(String(m));notes.length=Math.min(notes.length,3);$('nl').innerHTML=notes.map(t=>`<div>${esc(t)}</div>`).join('')}
-function evCard(n){const f=FX[n];$('sub').textContent=n||'Clear skies';$('evc').innerHTML=`${ic('sun',44)}<div><small>Active Event:</small><b style="display:block;font:800 20px 'Pixelify Sans',serif">${n?esc(n):'None'}</b><small>${f?esc(f[2]):'Clear skies and nothing unusual.'}</small></div>`}
-const toast=m=>{notify(m);const d=document.createElement('div');d.textContent=m;$('toasts').appendChild(d);setTimeout(()=>d.remove(),Math.min(9000,2500+45*Math.max(0,String(m).length-50)))};
+function evCard(n){const f=FX[n],q=EVQ[n],c=$('evc');c.classList.toggle('qe',!!q);if(q){c.dataset.k=q[0];c.style.setProperty('--c',q[1])}else{c.removeAttribute('data-k');c.style.removeProperty('--c')}$('sub').textContent=n||'Clear skies';$('evc').innerHTML=`<div><small>Active Event:</small><b style="display:block;font:800 20px 'Pixelify Sans',serif">${n?esc(n):'None'}</b><small>${f?esc(f[2]):'Clear skies and nothing unusual.'}</small></div>`}
+const toast=m=>notify(m);
 function callPy(fn,...a){const h=py&&py.globals.get(fn);if(!h){toast(busy?'The garden is still getting ready...':'The garden has not started yet. Open the Code Lab and press Run All Topics.');return}
  try{const m=h(...a);if(m)toast(m)}catch(e){toast('Python error: '+e.message.trim().split('\n').pop())}finally{h.destroy()}}
 function addPlantToGrid(p,n,s){n?plants[p]={name:n,stage:s||'mature'}:delete plants[p];drawGarden()}
@@ -3649,7 +3699,7 @@ function tileClick(i){const r=Math.floor(i/10),c=i%10,e=plants[i],st=e&&String(e
 const TOOLS=[['plant','sprout','Plant'],['water','drop','Water'],['harvest','basket','Harvest'],['shovel','shovel','Shovel'],['ward','ward','Ward'],['spray','spray','Spray'],['radar','radar','Radar']];
 const BIG=[['inv','bag','Inventory'],['plant','seed','Seeds'],['water','can','Water'],['shovel','shovel','Shovel'],['harvest','basket','Harvest'],['mkt','store','Market'],['book','book','Codex'],['jr','scroll','Journal'],['lab','play','Code Lab']];
 const TN={plant:['Seeds','Plant the selected seed.'],water:['Watering Can','Water nearby crops.'],harvest:['Harvest Basket','Pick ripe crops.'],shovel:['Shovel','Remove a plant for good.'],ward:['Ward','Link 3 to form a barrier.'],spray:['Cleansing Spray','Cure one blighted tile.'],radar:['Blight Radar','Scan a tile for 5 stamina.']};
-function drawTools(){$('bar').innerHTML=BIG.map(([k,i,l])=>{const w=['inv','mkt','book','jr','lab'].includes(k);return`<button class="btn big${!w&&tool===k?' on':''}" onclick="${w?`openWin('${k}')`:`tool='${k}';drawTools()`}" title="${l}">${PI[k]?`<img class="pi" src="${SPR[PI[k]]}" alt="">`:ic(i,44)}<small>${l}</small>${k==='inv'&&invRows.length?'<i class="bd">!</i>':''}</button>`}).join('');
+function drawTools(){$('bar').innerHTML=BIG.map(([k,i,l],n)=>{const w=['inv','mkt','book','jr','lab'].includes(k);return`<button class="btn big${!w&&tool===k?' on':''}" onclick="bigAct('${k}')" title="${l} (${n+1})"><span class="kb">${n+1}</span>${PI[k]?`<img class="pi" src="${SPR[PI[k]]}" alt="">`:ic(i,44)}<small>${l}</small>${k==='inv'&&invRows.length?'<i class="bd">!</i>':''}</button>`}).join('');
  $('seeds').style.display=tool==='plant'?'flex':'none';const t=TN[tool]||TN.plant,x=[['ward','ward','Ward ×'+sup.ward],['spray','spray','Spray ×'+sup.spray]].concat(sup.radar?[['radar','radar','Radar']]:[]);
  $('seltool').innerHTML=`<div class="stn"><small>Selected Tool:</small><b>${t[0]}</b><small>${t[1]}</small></div><div class="xt">${x.map(([k,i,l])=>`<button class="btn${tool===k?' on':''}" onclick="tool='${k}';drawTools()">${ic(i,20)}${l}</button>`).join('')}<button class="btn" onclick="callPy('quick_defend_action')" title="Spend up to 3 Wards on the Shadow Hound's route">${ic('shield',20)}Defend</button><button class="btn" onclick="callPy('rescue_action')" title="Spend up to 3 Sprays on the most valuable infected plants">${ic('spray',20)}Rescue</button></div>`}
 function updateResources(w,e,h,c){if(typeof w==='object'&&w!==null){c=w.coins;w=w.water}w=w??0;c=c??0;$('wa-t').textContent=`${w} / 200 L`;$('wa-b').style.width=Math.min(100,w/2)+'%';$('coins').textContent=fmt(c)}
@@ -3657,11 +3707,12 @@ const updateStamina=(c,m)=>{$('st-t').textContent=`${c} / ${m}`;$('st-b').style.
 function addPlantsToDropdown(p){seeds=plain(p);if(!seeds.some(s=>s[0]===seedSel))seedSel=seeds.length?seeds[0][0]:'';drawSeeds()}
 function drawSeeds(){const t=$('seeds');t.innerHTML=seeds.length?'':'<small>No seeds - visit Marco</small>';seeds.forEach(([n,e,o])=>{const b=document.createElement('button');b.className='sd'+(n===seedSel?' sel':'');b.title=`${n} ×${fmt(o)}`;b.innerHTML=sym(e,n,34)+`<span class="cnt">${fmt(o)}</span>`;b.onclick=()=>{seedSel=n;tool='plant';drawSeeds();drawTools()};t.appendChild(b)})}
 function pushAction(a){hist.push(a);if(hist.length>8)hist.shift();$('j-h').innerHTML=[...hist].reverse().map(h=>`<div class="row">${esc(h)}</div>`).join('')}
-function updateClimateQueue(ev){ev=plain(ev);$('j-q').innerHTML=ev.length?ev.map(e=>`<div class="row"><b>${esc(e)}</b></div>`).join(''):'<small>No events queued.</small>'}
-const FX={Drought:['day','#d9892a','Watering costs double Water today.'],'Cold Snap':['day','#5a9ad0','Every action costs double stamina today.'],'Festival Demand':['day','#d9708a','One color tier sells for more for a few days.'],'Market Glut':['day','#7f8a98','One color tier sells for less for a few days.'],Snowstorm:['night','#7a9ac8','Last night: the cold halted all natural growth.'],Drizzle:['night','#4a8ab0','Last night: rain watered a few young plants.'],'Market Rally':['night','#c9a030','Last night: the Market payout got a bonus.']};
+const EVQ={Drought:['sun','#f5c22b'],'Cold Snap':['frost','#5ab8f0'],'Festival Demand':['fest','#f06a9c'],'Market Glut':['glut','#8d97a8'],Snowstorm:['snow','#a9cdf5'],Drizzle:['rain','#4a9be0'],'Market Rally':['rally','#f0b92c']};
+function updateClimateQueue(ev){ev=plain(ev);$('j-q').innerHTML=ev.length?ev.map(e=>{const q=EVQ[e];return`<div class="row${q?' qe':''}"${q?` data-k="${q[0]}" style="--c:${q[1]}"`:''}><b>${esc(e)}</b></div>`}).join(''):'<small>No events queued.</small>'}
+const FX={Drought:['day','#d9892a','Watering costs double Water today.'],'Cold Snap':['day','#5a9ad0','Every action costs double stamina today.'],'Festival Demand':['day','#d9708a','One color tier sells for more for a few days.'],'Market Glut':['day','#7f8a98','One color tier sells for less for a few days.'],Snowstorm:['day','#7a9ac8','The cold halts all natural growth today.'],Drizzle:['day','#4a8ab0','Rain waters a few young plants this morning.'],'Market Rally':['day','#c9a030','Today\'s Market payout gets a bonus.']};
 const THEME={Drought:'drought','Cold Snap':'frost','Festival Demand':'festival','Market Glut':'glut',Snowstorm:'snow',Drizzle:'rain','Market Rally':'rally'};let fxT=[];
 function updateScreenEffects(names){fxT.forEach(clearTimeout);fxT=[];const a=plain(names).filter(n=>FX[n]);$('fxbar').innerHTML=a.map(n=>`<span class="fx${FX[n][0]==='night'?' past':''}" style="--c:${FX[n][1]}" title="${FX[n][2]}">${esc(n)}</span>`).join('');
- const first=a[0];evCard(first);setEnv(first?THEME[first]:'');}
+ const first=a[0];evCard(first);setEnv(first?THEME[first]:'');{const o=$('evfx'),q=EVQ[first];if(q){o.dataset.k=q[0];o.style.setProperty('--c',q[1])}else o.removeAttribute('data-k')}setFx(a.includes('Festival Demand')?'festival':first==='Market Rally'?'rally':'')}
 /* ---------- plant book ---------- */
 let bookRows=[],hlRun=0;
 function renderPlantBook(rows,u,t){bookRows=plain(rows);$('pb-empty').style.display='none';$('pb-count').textContent=`${u} / ${t} unlocked`;$('pb-tree').innerHTML=bookRows.map(([d,e,n,un,note])=>`<div class="pr${un?'':' lock'}" data-n="${esc(n)}" style="margin-left:${d*20}px" title="${esc(note||'')}">${sym(e,n,28)}<b>${esc(n)}</b>${un?'':'<em>locked</em>'}<small>${esc(note||'')}</small></div>`).join('')}
@@ -3709,7 +3760,12 @@ function dlg(w){document.querySelectorAll('#dlg>div').forEach(d=>d.style.display
 function closeDlg(){$('dlg').classList.remove('open');yes=null}
 function confirmAct(k,t,p,ok,can){if(skip[k])return ok();$('cf-t').textContent=t;$('cf-p').textContent=p;$('cf-k').checked=false;$('cf-r').style.display=can?'':'none';yes=()=>{if(can&&$('cf-k').checked)skip[k]=1;ok()};dlg('conf');$('cf-ok').focus()}
 $('cf-ok').onclick=()=>{const g=yes;closeDlg();g&&g()};
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDlg();openWin();return}if(e.ctrlKey||e.metaKey||e.altKey||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)||$('wins').classList.contains('open')||$('dlg').classList.contains('open'))return;
+const WINK=['inv','mkt','book','jr','lab'];
+function bigAct(k){if(WINK.includes(k)){openWin(k);return}openWin();tool=k;drawTools()}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDlg();openWin();return}if(e.ctrlKey||e.metaKey||e.altKey||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)||$('dlg').classList.contains('open')||nightRun)return;
+  if(e.key==='0'){zoomState.z=1;zoomState.x=zoomState.y=0;applyZoom();return}
+  const bi=BIG.findIndex((_,n)=>String(n+1)===e.key);if(bi>=0){e.preventDefault();if(e.repeat)return;const k=BIG[bi][0];if(WINK.includes(k)&&$('w-'+k).classList.contains('open'))openWin();else bigAct(k);return}
+  if($('wins').classList.contains('open'))return;
  const t={p:'plant',w:'water',h:'harvest',s:'shovel'}[e.key.toLowerCase()];if(t){tool=t;drawTools()}else if((e.key===' '||e.key==='Enter')&&hover!==null&&document.activeElement.className!=='t'){e.preventDefault();tileClick(hover)}});
 /* ---------- end of day: night time-lapse, Python runs the real night, morning summary ---------- */
 let nightRun=0,nightSkip=0,nightWake=null;const wait=ms=>new Promise(r=>{if(nightSkip)return r();const t=setTimeout(r,reduce?60:ms);nightWake=()=>{clearTimeout(t);r()}});
@@ -3735,11 +3791,23 @@ async function runTopics(){for(const k of Object.keys(topics).map(Number)){outLo
 async function runPythonCode(){if(busy)return toast('Python is still busy - one moment.');busy=true;try{await initPy();await py.runPythonAsync($('code-editor').value.trim())}catch(e){outLog('Error: '+esc(e.message))}finally{busy=false}}
 async function runAllTopics(){if(busy)return toast('Python is still busy - one moment.');busy=true;try{await initPy()}catch(e){outLog('Failed to load Python: '+esc(e.message));busy=false;return}const r=await runTopics();busy=false;toast(r.ok?'All 11 topics ran successfully.':`Stopped at Topic ${r.k} - see the console.`)}
 async function boot(){if(busy)return;busy=true;toast('Loading Python (a few seconds the first time)...');try{if(typeof loadPyodide!=='function')throw new Error('Pyodide could not be downloaded. Check your connection.');await initPy();const r=await runTopics();if(!r.ok)throw new Error(`Topic ${r.k} failed: ${r.m}`);drawGarden();drawTools();toast('The garden is ready.')}catch(e){toast(e.message+' Reload the page to try again.')}finally{busy=false}}
+/* ---------- zoom (mouse wheel, towards the cursor) & drag-to-pan; 0 resets ---------- */
+const zoomState={z:1,x:0,y:0};let zPanned=false;
+function applyZoom(){const s=$('stage'),w=s.clientWidth,h=s.clientHeight;zoomState.x=Math.min(0,Math.max(w*(1-zoomState.z),zoomState.x));zoomState.y=Math.min(0,Math.max(h*(1-zoomState.z),zoomState.y));$('world').style.transform=`translate(${zoomState.x}px,${zoomState.y}px) scale(${zoomState.z})`}
+function zoomAt(px,py,nz){nz=Math.min(4,Math.max(1,nz));const k=nz/zoomState.z;zoomState.x=px-(px-zoomState.x)*k;zoomState.y=py-(py-zoomState.y)*k;zoomState.z=nz;applyZoom()}
+function initZoom(){const s=$('stage');
+ $('main').addEventListener('wheel',e=>{e.preventDefault();const r=s.getBoundingClientRect(),d=e.deltaMode===1?e.deltaY*16:e.deltaMode===2?e.deltaY*100:e.deltaY;zoomAt(e.clientX-r.left,e.clientY-r.top,zoomState.z*Math.exp(-d*.0015))},{passive:false});
+ s.addEventListener('pointerdown',e=>{zPanned=false;if(e.button!==0||zoomState.z<=1)return;const sx=e.clientX,sy=e.clientY,vx=zoomState.x,vy=zoomState.y;
+  const mv=ev=>{const dx=ev.clientX-sx,dy=ev.clientY-sy;if(!zPanned&&Math.hypot(dx,dy)<6)return;zPanned=true;s.classList.add('pan');zoomState.x=vx+dx;zoomState.y=vy+dy;applyZoom()},
+  up=()=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);removeEventListener('pointercancel',up);s.classList.remove('pan')};
+  addEventListener('pointermove',mv);addEventListener('pointerup',up);addEventListener('pointercancel',up)});
+ s.addEventListener('click',e=>{if(zPanned){zPanned=false;e.stopPropagation();e.preventDefault()}},true);
+ addEventListener('resize',applyZoom)}
 /* ---------- init ---------- */
 function init(){loadSprites();drawScene('');hydrate();$('marco').firstChild.src=marcoUrl();Object.entries({book:'codex',inv:'bag',mkt:'market',marco:'shop',jr:'journal'}).forEach(([w,s])=>$('w-'+w).querySelector('h2').insertAdjacentHTML('afterbegin',`<img class="wi" src="${SPR[s]}" alt="">`));
  
  $('topic-selector').innerHTML=Object.entries(topics).map(([k,t])=>`<option value="${k}">Topic ${k}: ${esc(t)}</option>`).join('');
  const mq=matchMedia('(max-aspect-ratio: 1/1)'),fit=()=>$('sc').setAttribute('preserveAspectRatio',mq.matches?'xMidYMid slice':'xMidYMid meet');fit();mq.addEventListener('change',fit);
- loadCode();loadTopic();drawGarden();drawTools();drawSup();boot()}
+ initZoom();loadCode();loadTopic();drawGarden();drawTools();drawSup();boot()}
 init();
 </script></body></html>
